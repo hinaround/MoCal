@@ -15,6 +15,7 @@ import {
   type TripBundle,
 } from '../storage/ledgerRepository';
 import { PwaInstallCard } from '../pwa/PwaInstallCard';
+import { SuccessDialog } from './SuccessDialog';
 import { TripListView } from './TripListView';
 import { TripWorkspace, type WorkspaceSection } from './TripWorkspace';
 
@@ -45,6 +46,7 @@ export function App() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [successFeedback, setSuccessFeedback] = useState<{ title: string; message: string } | null>(null);
 
   const preferredTripId = useMemo(
     () => trips.find((trip) => trip.id === lastTripId)?.id ?? trips[0]?.id ?? null,
@@ -59,6 +61,10 @@ export function App() {
   async function refreshSelectedTrip(tripId: string) {
     const bundle = await getTripBundle(tripId);
     setSelectedBundle(bundle);
+  }
+
+  function showSuccess(title: string, message: string) {
+    setSuccessFeedback({ title, message });
   }
 
   useEffect(() => {
@@ -109,8 +115,10 @@ export function App() {
       setSaving(true);
       setError(null);
       await task();
+      return true;
     } catch (cause) {
       setError(cause instanceof Error && cause.message ? cause.message : '保存失败，请再试一次');
+      return false;
     } finally {
       setSaving(false);
     }
@@ -124,11 +132,15 @@ export function App() {
   }
 
   async function handleCreateTrip(input: { name: string; startDate?: string; endDate?: string; note?: string }) {
-    await runSavingTask(async () => {
+    const created = await runSavingTask(async () => {
       const trip = await createTrip(input);
       await refreshTrips();
       openTrip(trip.id, 'home');
     });
+
+    if (created) {
+      showSuccess('账本已创建', `当前账本“${input.name.trim()}”已经创建成功，现在可以继续加成员、记入金或记支出。`);
+    }
   }
 
   async function handleCreateParty(input: { name: string; defaultHeadcount: number; note?: string }) {
@@ -136,7 +148,7 @@ export function App() {
       return;
     }
 
-    await runSavingTask(async () => {
+    const created = await runSavingTask(async () => {
       await createParty({
         tripId: selectedBundle.trip.id,
         name: input.name,
@@ -147,6 +159,10 @@ export function App() {
       await refreshSelectedTrip(selectedBundle.trip.id);
       await refreshTrips();
     });
+
+    if (created) {
+      showSuccess('成员已加入', `成员“${input.name.trim()}”已经加入当前账本，后面记支出时可以直接点选。`);
+    }
   }
 
   async function handleUpdateParty(party: Party) {
@@ -154,11 +170,15 @@ export function App() {
       return;
     }
 
-    await runSavingTask(async () => {
+    const updated = await runSavingTask(async () => {
       await updateParty(party);
       await refreshSelectedTrip(selectedBundle.trip.id);
       await refreshTrips();
     });
+
+    if (updated) {
+      showSuccess('成员资料已保存', `“${party.name}”的名称、默认人数或状态已经保存成功。`);
+    }
   }
 
   async function handleSaveDeposit(input: {
@@ -173,7 +193,8 @@ export function App() {
       return;
     }
 
-    await runSavingTask(async () => {
+    const partyName = selectedBundle.parties.find((party) => party.id === input.partyId)?.name ?? '该成员';
+    const saved = await runSavingTask(async () => {
       if (input.depositId) {
         await updateDeposit({
           depositId: input.depositId,
@@ -196,6 +217,14 @@ export function App() {
       await refreshSelectedTrip(selectedBundle.trip.id);
       await refreshTrips();
     });
+
+    if (saved) {
+      if (input.depositId) {
+        showSuccess('成员入金已调整', `${partyName}的这笔成员入金已经调整成功，并已重新计入总账。`);
+      } else {
+        showSuccess('成员入金已记入', `${partyName}的成员入金已经正式入账，公账余额也已同步更新。`);
+      }
+    }
   }
 
   async function handleVoidDeposit(input: { depositId: string; reason: string }) {
@@ -203,11 +232,15 @@ export function App() {
       return;
     }
 
-    await runSavingTask(async () => {
+    const voided = await runSavingTask(async () => {
       await voidDeposit(input);
       await refreshSelectedTrip(selectedBundle.trip.id);
       await refreshTrips();
     });
+
+    if (voided) {
+      showSuccess('成员入金已作废', '这笔成员入金已经作废，不再计入总账和公账余额。');
+    }
   }
 
   async function handleSaveExpense(input: {
@@ -227,7 +260,8 @@ export function App() {
       return;
     }
 
-    await runSavingTask(async () => {
+    const title = input.title?.trim() || input.category?.trim() || '这笔支出';
+    const saved = await runSavingTask(async () => {
       const expense = {
         tripId: selectedBundle.trip.id,
         paidAt: input.paidAt,
@@ -259,6 +293,14 @@ export function App() {
       await refreshSelectedTrip(selectedBundle.trip.id);
       await refreshTrips();
     });
+
+    if (saved) {
+      if (input.expenseId) {
+        showSuccess('支出已调整', `“${title}”已经调整成功，分摊结果和余额也已同步更新。`);
+      } else {
+        showSuccess('支出已记入', `“${title}”已经正式入账，这笔支出的分摊和余额已经同步更新。`);
+      }
+    }
   }
 
   async function handleVoidExpense(input: { expenseId: string; reason: string }) {
@@ -266,29 +308,46 @@ export function App() {
       return;
     }
 
-    await runSavingTask(async () => {
+    const voided = await runSavingTask(async () => {
       await voidExpense(input);
       await refreshSelectedTrip(selectedBundle.trip.id);
       await refreshTrips();
     });
+
+    if (voided) {
+      showSuccess('支出已作废', '这笔支出已经作废，不再计入总账、成员余额和清账建议。');
+    }
   }
+
+  const successDialog = (
+    <SuccessDialog
+      open={Boolean(successFeedback)}
+      title={successFeedback?.title ?? ''}
+      message={successFeedback?.message ?? ''}
+      onClose={() => setSuccessFeedback(null)}
+    />
+  );
 
   if (selectedTripId && !selectedBundle) {
     return (
-      <main className="page-shell">
-        {error ? <div className="banner error">{error}</div> : null}
-        <section className="hero-card">
-          <p className="eyebrow">正在打开</p>
-          <h1>正在读取当前账本</h1>
-          <p className="lead">稍等一下，账本马上就好。</p>
-        </section>
-      </main>
+      <>
+        {successDialog}
+        <main className="page-shell">
+          {error ? <div className="banner error">{error}</div> : null}
+          <section className="hero-card">
+            <p className="eyebrow">正在打开</p>
+            <h1>正在读取当前账本</h1>
+            <p className="lead">稍等一下，账本马上就好。</p>
+          </section>
+        </main>
+      </>
     );
   }
 
   if (selectedBundle && selectedTripId) {
     return (
       <>
+        {successDialog}
         {error ? <div className="banner error">{error}</div> : null}
         <PwaInstallCard />
         <TripWorkspace
@@ -309,6 +368,7 @@ export function App() {
 
   return (
     <>
+      {successDialog}
       {error ? <div className="banner error">{error}</div> : null}
       <PwaInstallCard />
       <TripListView

@@ -92,7 +92,7 @@ export function FamilyRosterPanel(props: FamilyRosterPanelProps) {
       <div className="section-heading">
         <div>
           <h2>成员名单</h2>
-          <p>名单只录一次，后面记账都从这里点选，不再反复手打人名。</p>
+          <p>名单只录一次，后面记账都从这里点选，不再反复手打人名。就算还没参加过任何支出，也可以先在这里建成员，再去成员入金。</p>
         </div>
       </div>
 

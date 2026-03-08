@@ -21,6 +21,7 @@ interface DepositLedgerPanelProps {
   }) => Promise<void>;
   onVoid: (input: { depositId: string; reason: string }) => Promise<void>;
   onCancelEdit?: () => void;
+  onOpenFamilies?: () => void;
 }
 
 interface DepositDraftState {
@@ -60,7 +61,7 @@ function buildDepositSummary(deposit: Deposit, parties: Party[]): string {
 }
 
 export function DepositLedgerPanel(props: DepositLedgerPanelProps) {
-  const { parties, deposits, saving, poolBalanceCents, editingDeposit, depositTimeline = [], onSave, onVoid, onCancelEdit } = props;
+  const { parties, deposits, saving, poolBalanceCents, editingDeposit, depositTimeline = [], onSave, onVoid, onCancelEdit, onOpenFamilies } = props;
   const [localEditingDepositId, setLocalEditingDepositId] = useState<string | null>(null);
   const [draft, setDraft] = useState<DepositDraftState>(buildBlankDraft());
   const [fieldErrors, setFieldErrors] = useState<DepositFieldErrors>({});
@@ -177,7 +178,7 @@ export function DepositLedgerPanel(props: DepositLedgerPanelProps) {
       <div className="section-heading">
         <div>
           <h2>{activeEditingDeposit ? '调整这笔成员入金' : '成员入金'}</h2>
-          <p>这里记的是成员先交上来的经费，不是支出。每笔入金都会进入总账流水。</p>
+          <p>这里记的是成员先交上来的经费，不是支出。只要已经在当前账本成员名单里，就算还没参加过任何支出，也可以先入金。</p>
         </div>
         {activeEditingDeposit ? (
           <button type="button" className="ghost-button" onClick={resetForm}>
@@ -185,6 +186,20 @@ export function DepositLedgerPanel(props: DepositLedgerPanelProps) {
           </button>
         ) : null}
       </div>
+
+      {parties.length === 0 ? (
+        <article className="inline-card compact-top-gap">
+          <strong>还没有成员</strong>
+          <p>成员入金不需要先参加过支出，但要先把成员加进当前账本。先去成员名单加一个成员，再回来入金。</p>
+          {onOpenFamilies ? (
+            <div className="action-row">
+              <button type="button" className="ghost-button small-button" onClick={onOpenFamilies}>
+                先去加成员
+              </button>
+            </div>
+          ) : null}
+        </article>
+      ) : null}
 
       {activeEditingDeposit ? (
         <article className="editing-info">

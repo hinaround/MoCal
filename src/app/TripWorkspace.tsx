@@ -332,6 +332,7 @@ export function TripWorkspace(props: TripWorkspaceProps) {
           onSave={handleSaveDeposit}
           onVoid={onVoidDeposit}
           onCancelEdit={() => setEditingDepositId(null)}
+          onOpenFamilies={() => setSection('families')}
         />
       ) : null}
 

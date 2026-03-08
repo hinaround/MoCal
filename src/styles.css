@@ -821,3 +821,8 @@ textarea:focus {
     flex-direction: column;
   }
 }
+
+
+.success-dialog .action-row {
+  justify-content: center;
+}
