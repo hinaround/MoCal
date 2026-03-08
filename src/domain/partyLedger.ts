@@ -108,14 +108,14 @@ export function buildPartyLedger(params: {
   let originalIndex = 0;
 
   for (const deposit of deposits.filter((item) => item.partyId === partyId)) {
-    const dialogSummary = `${partyName}成员入金 · ${formatMoney(deposit.amountCents)} · 日期 ${deposit.paidAt}${deposit.note?.trim() ? ` · 备注：${deposit.note.trim()}` : ''}`;
+    const dialogSummary = `${partyName}成员交款 · ${formatMoney(deposit.amountCents)} · 日期 ${deposit.paidAt}${deposit.note?.trim() ? ` · 备注：${deposit.note.trim()}` : ''}`;
 
     items.push({
       id: `deposit:${deposit.id}`,
       date: deposit.paidAt,
       kind: 'deposit',
       kindLabel: '入金',
-      title: '成员入金',
+      title: '成员交款',
       detail: `${partyName}入金，记进公账，不是支出。`,
       note: deposit.note?.trim(),
       signedAmountCents: deposit.amountCents,

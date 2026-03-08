@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { buildShareAllocationPreview } from '../domain/share';
-import { buildExpenseConfirmationSentence, buildTailRuleSentence } from '../domain/validation';
+import { buildAllocationBreakdownSentence, buildExpenseConfirmationSentence, buildTailRuleSentence } from '../domain/validation';
 import type { Expense, ExpenseParticipant, Party, ShareMode } from '../domain/types';
 import { formatCurrency, parseAmountToCents, todayInputValue } from '../utils/format';
 
@@ -55,7 +55,7 @@ function buildBlankDraft(parties: Party[]): ExpenseDraftState {
     amount: '',
     payerKind: 'party',
     payerPartyId: '',
-    shareMode: 'by_party',
+    shareMode: 'by_headcount',
     note: '',
     reason: '',
     selectedPartyIds: [],
@@ -231,7 +231,7 @@ export function ExpenseComposerPanel(props: ExpenseComposerPanelProps) {
     }
 
     if (draft.payerKind === 'pool' && amountCents !== null && amountCents > poolBalanceCents) {
-      errors.payer = '公账余额不够支付这笔，请改成某家代付，或先记一笔成员入金';
+      errors.payer = '公账余额不够支付这笔，请改成某家代付，或先记一笔成员交款';
     }
 
     if (participants.length === 0) {
@@ -321,6 +321,18 @@ export function ExpenseComposerPanel(props: ExpenseComposerPanelProps) {
         partyNamesById,
       })
     : '先把短标题、金额、谁先付、谁参加和怎么分填完整。';
+
+  const liveBreakdownSentence = liveAllocation.length > 0
+    ? buildAllocationBreakdownSentence({
+        shareMode: draft.shareMode,
+        allocations: liveAllocation.map((line) => ({
+          partyId: line.partyId,
+          headcountSnapshot: line.headcountSnapshot,
+          shareAmountCents: line.shareAmountCents,
+        })),
+        partyNamesById,
+      })
+    : '';
 
   const liveTailSentence = liveAllocation.length > 0
     ? buildTailRuleSentence({
@@ -461,16 +473,6 @@ export function ExpenseComposerPanel(props: ExpenseComposerPanelProps) {
           <div className="chip-row">
             <button
               type="button"
-              className={draft.shareMode === 'by_party' ? 'chip active' : 'chip'}
-              onClick={() => {
-                setPatch({ shareMode: 'by_party' });
-                setFieldErrors((current) => ({ ...current, headcount: undefined }));
-              }}
-            >
-              按参加的家数平分
-            </button>
-            <button
-              type="button"
               className={draft.shareMode === 'by_headcount' ? 'chip active' : 'chip'}
               onClick={() => {
                 setPatch({ shareMode: 'by_headcount' });
@@ -479,7 +481,18 @@ export function ExpenseComposerPanel(props: ExpenseComposerPanelProps) {
             >
               按实际到场人数分
             </button>
+            <button
+              type="button"
+              className={draft.shareMode === 'by_party' ? 'chip active' : 'chip'}
+              onClick={() => {
+                setPatch({ shareMode: 'by_party' });
+                setFieldErrors((current) => ({ ...current, headcount: undefined }));
+              }}
+            >
+              按参加的家数平分
+            </button>
           </div>
+          <p className="field-hint">默认按人数分；只有想让每家平均承担时，再改成按家数平分。</p>
         </div>
 
         {draft.shareMode === 'by_headcount' && draft.selectedPartyIds.length > 0 ? (
@@ -568,6 +581,7 @@ export function ExpenseComposerPanel(props: ExpenseComposerPanelProps) {
       <div className="sticky-submit-bar">
         <div className="sticky-submit-copy">
           <strong>{liveSentence}</strong>
+          <p className="sticky-breakdown">{liveBreakdownSentence || '先把短标题、金额、谁先付、谁参加和怎么分填完整。'}</p>
           <p>{liveTailSentence || '确认前先看清楚付款方式、参与成员和分摊规则。'}</p>
         </div>
         <button type="button" className="primary-button" onClick={() => void handleSubmit()} disabled={saving}>

@@ -1,12 +1,14 @@
 const DB_NAME = 'family-trip-ledger';
-const DB_VERSION = 1;
+const DB_VERSION = 3;
 
 export const STORE_NAMES = {
   trips: 'trips',
+  memberProfiles: 'memberProfiles',
   parties: 'parties',
   deposits: 'deposits',
   expenses: 'expenses',
   expenseParticipants: 'expenseParticipants',
+  backupSnapshots: 'backupSnapshots',
 } as const;
 
 export type StoreName = (typeof STORE_NAMES)[keyof typeof STORE_NAMES];
@@ -38,6 +40,11 @@ export async function openDatabase(): Promise<IDBDatabase> {
         store.createIndex('createdAt', 'createdAt', { unique: false });
       }
 
+      if (!database.objectStoreNames.contains(STORE_NAMES.memberProfiles)) {
+        const store = database.createObjectStore(STORE_NAMES.memberProfiles, { keyPath: 'id' });
+        store.createIndex('createdAt', 'createdAt', { unique: false });
+      }
+
       if (!database.objectStoreNames.contains(STORE_NAMES.parties)) {
         const store = database.createObjectStore(STORE_NAMES.parties, { keyPath: 'id' });
         store.createIndex('tripId', 'tripId', { unique: false });
@@ -60,10 +67,16 @@ export async function openDatabase(): Promise<IDBDatabase> {
         store.createIndex('expenseId', 'expenseId', { unique: false });
         store.createIndex('partyId', 'partyId', { unique: false });
       }
+
+      if (!database.objectStoreNames.contains(STORE_NAMES.backupSnapshots)) {
+        const store = database.createObjectStore(STORE_NAMES.backupSnapshots, { keyPath: 'id' });
+        store.createIndex('createdAt', 'createdAt', { unique: false });
+        store.createIndex('kind', 'kind', { unique: false });
+      }
     };
 
     request.onsuccess = () => resolve(request.result);
-    request.onerror = () => reject(request.error ?? new Error('打开本地账本失败'));
+    request.onerror = () => reject(request.error ?? new Error('打开本地数据失败'));
   });
 }
 

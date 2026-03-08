@@ -13,55 +13,71 @@ interface FullLedgerPanelProps {
   expenseParticipants: ExpenseParticipant[];
   settlement: TripSettlement;
   saving: boolean;
+  variant?: 'detail' | 'screenshot';
+  title?: string;
+  description?: string;
+  showHeader?: boolean;
   onEditDeposit: (depositId: string) => void;
   onVoidDeposit: (input: { depositId: string; reason: string }) => Promise<void>;
   onEditExpense: (expenseId: string) => void;
   onVoidExpense: (input: { expenseId: string; reason: string }) => Promise<void>;
 }
 
-type LedgerMode = 'screenshot' | 'detail';
 type VoidTarget = { kind: 'deposit' | 'expense'; id: string; summary: string; title: string } | null;
 
 export function FullLedgerPanel(props: FullLedgerPanelProps) {
-  const { trip, parties, deposits, expenses, expenseParticipants, settlement, saving, onEditDeposit, onVoidDeposit, onEditExpense, onVoidExpense } = props;
+  const {
+    trip,
+    parties,
+    deposits,
+    expenses,
+    expenseParticipants,
+    settlement,
+    saving,
+    variant = 'detail',
+    title,
+    description,
+    showHeader = true,
+    onEditDeposit,
+    onVoidDeposit,
+    onEditExpense,
+    onVoidExpense,
+  } = props;
   const ledger = useMemo(() => buildFullLedger({ parties, deposits, expenses, expenseParticipants }), [deposits, expenseParticipants, expenses, parties]);
   const transfers = useMemo(() => buildSettlementTransfers({ parties, summaries: settlement.summaries }), [parties, settlement.summaries]);
-  const [mode, setMode] = useState<LedgerMode>('screenshot');
   const [voidTarget, setVoidTarget] = useState<VoidTarget>(null);
   const generatedAt = useMemo(
     () => new Intl.DateTimeFormat('zh-CN', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' }).format(new Date()),
     [],
   );
 
+  const resolvedTitle = title ?? (variant === 'screenshot' ? '对账截图' : '整本流水');
+  const resolvedDescription = description ?? (variant === 'screenshot'
+    ? '这一页适合直接截图发群，不显示操作按钮。'
+    : '逐笔看清每一笔钱去了哪里；要改账，也从这里进入。');
+
   return (
-    <section className="panel-card">
-      <div className="section-heading">
-        <div>
-          <h2>总账流水</h2>
-          <p>截图时只保留最关键的信息；核对或改账时，再看逐笔明细和调整记录。</p>
+    <section className="panel-card compact-top-gap">
+      {showHeader ? (
+        <div className="section-heading">
+          <div>
+            <h2>{resolvedTitle}</h2>
+            <p>{resolvedDescription}</p>
+          </div>
         </div>
-      </div>
+      ) : null}
 
-      <div className="mode-switch">
-        <button type="button" className={mode === 'screenshot' ? 'mode-button active' : 'mode-button'} onClick={() => setMode('screenshot')}>
-          对账截图模式
-        </button>
-        <button type="button" className={mode === 'detail' ? 'mode-button active' : 'mode-button'} onClick={() => setMode('detail')}>
-          流水明细模式
-        </button>
-      </div>
-
-      {mode === 'screenshot' ? (
-        <article className="screenshot-card compact-top-gap">
+      {variant === 'screenshot' ? (
+        <article className="screenshot-card">
           <div className="screenshot-header">
             <div>
-              <p className="eyebrow">总账对账图</p>
+              <p className="eyebrow">对账截图</p>
               <h3>{trip.name}</h3>
               <p>{formatDateRange(trip.startDate, trip.endDate)} · 生成时间 {generatedAt}</p>
             </div>
           </div>
           <div className="screenshot-grid">
-            <div><span>总入金</span><strong>{formatCurrency(settlement.totalDepositCents)}</strong></div>
+            <div><span>总交款</span><strong>{formatCurrency(settlement.totalDepositCents)}</strong></div>
             <div><span>总支出</span><strong>{formatCurrency(settlement.totalExpenseCents)}</strong></div>
             <div><span>公账可用余额</span><strong>{formatCurrency(settlement.poolBalanceCents)}</strong></div>
           </div>
@@ -72,7 +88,7 @@ export function FullLedgerPanel(props: FullLedgerPanelProps) {
                 <div key={summary.partyId} className="simple-row">
                   <div>
                     <strong>{party?.name ?? '未命名'}</strong>
-                    <span>累计入金 {formatCurrency(summary.depositCents)} · 代付 {formatCurrency(summary.directPaidCents)} · 已分摊 {formatCurrency(summary.totalShareCents)}</span>
+                    <span>累计交款 {formatCurrency(summary.depositCents)} · 代付 {formatCurrency(summary.directPaidCents)} · 已分摊 {formatCurrency(summary.totalShareCents)}</span>
                   </div>
                   <strong className={summary.netCents >= 0 ? 'good-text' : 'warn-text'}>{formatBalanceLabel(summary.netCents)}</strong>
                 </div>
@@ -80,12 +96,12 @@ export function FullLedgerPanel(props: FullLedgerPanelProps) {
             })}
           </div>
           <div className="transfer-box">
-            <strong>如现在清账</strong>
+            <strong>余额处理建议</strong>
             {transfers.length > 0 ? transfers.map((transfer) => <p key={`${transfer.fromPartyId}-${transfer.toPartyId}`}>{transfer.sentence}</p>) : <p>现在如果清账，大家正好持平，不需要再转账。</p>}
           </div>
         </article>
       ) : (
-        <div className="stack-list ledger-list compact-top-gap">
+        <div className="stack-list ledger-list">
           {ledger.map((item) => (
             <details key={`${item.type}:${item.id}`} className="ledger-card detail-disclosure">
               <summary className="detail-summary detail-summary-actions">
@@ -104,19 +120,19 @@ export function FullLedgerPanel(props: FullLedgerPanelProps) {
                       {item.type === 'deposit' ? (
                         <>
                           <button type="button" className="ghost-button small-button" onClick={(event) => { event.preventDefault(); event.stopPropagation(); onEditDeposit(item.id); }}>
-                            调整账目
+                            改这笔
                           </button>
-                          <button type="button" className="ghost-button small-button danger-button" onClick={(event) => { event.preventDefault(); event.stopPropagation(); setVoidTarget({ kind: 'deposit', id: item.id, summary: item.dialogSummary, title: '作废这笔成员入金' }); }}>
-                            作废账目
+                          <button type="button" className="ghost-button small-button danger-button" onClick={(event) => { event.preventDefault(); event.stopPropagation(); setVoidTarget({ kind: 'deposit', id: item.id, summary: item.dialogSummary, title: '作废这笔成员交款' }); }}>
+                            作废这笔
                           </button>
                         </>
                       ) : (
                         <>
                           <button type="button" className="ghost-button small-button" onClick={(event) => { event.preventDefault(); event.stopPropagation(); onEditExpense(item.id); }}>
-                            调整账目
+                            改这笔
                           </button>
                           <button type="button" className="ghost-button small-button danger-button" onClick={(event) => { event.preventDefault(); event.stopPropagation(); setVoidTarget({ kind: 'expense', id: item.id, summary: item.dialogSummary, title: '作废这笔支出' }); }}>
-                            作废账目
+                            作废这笔
                           </button>
                         </>
                       )}

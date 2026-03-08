@@ -49,6 +49,9 @@ export function buildTripSettlement(params: {
   }
 
   for (const deposit of postedDeposits) {
+    if (!deposit.partyId) {
+      continue;
+    }
     depositByParty.set(deposit.partyId, (depositByParty.get(deposit.partyId) ?? 0) + deposit.amountCents);
   }
 

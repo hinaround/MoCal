@@ -4,6 +4,7 @@ import type {
   Deposit,
   Expense,
   ExpenseParticipant,
+  MemberProfile,
   Party,
   ShareParticipantInput,
   Trip,
@@ -22,6 +23,16 @@ import {
 
 export interface TripBundle {
   trip: Trip;
+  parties: Party[];
+  deposits: Deposit[];
+  expenses: Expense[];
+  expenseParticipants: ExpenseParticipant[];
+}
+
+
+export interface HomeBundle {
+  trips: Trip[];
+  memberProfiles: MemberProfile[];
   parties: Party[];
   deposits: Deposit[];
   expenses: Expense[];
@@ -146,6 +157,69 @@ function buildAuditEntry(input: {
   };
 }
 
+function normalizeName(value: string): string {
+  return value.trim().replace(/\s+/g, '');
+}
+
+function sortMemberProfiles(profiles: MemberProfile[]): MemberProfile[] {
+  return [...profiles].sort((left, right) => left.sortOrder - right.sortOrder || left.name.localeCompare(right.name));
+}
+
+async function ensureMemberProfilesLinked(): Promise<{ memberProfiles: MemberProfile[]; parties: Party[] }> {
+  const [memberProfiles, parties] = await Promise.all([
+    getAll<MemberProfile>(STORE_NAMES.memberProfiles),
+    getAll<Party>(STORE_NAMES.parties),
+  ]);
+
+  const profilesById = new Map(memberProfiles.map((profile) => [profile.id, profile]));
+  const profilesByName = new Map(memberProfiles.map((profile) => [normalizeName(profile.name), profile]));
+  let nextSortOrder = memberProfiles.reduce((maxValue, profile) => Math.max(maxValue, profile.sortOrder), -1) + 1;
+  const createdProfiles: MemberProfile[] = [];
+  const updatedParties: Party[] = [];
+
+  for (const party of [...parties].sort((left, right) => left.sortOrder - right.sortOrder || left.name.localeCompare(right.name))) {
+    let profile = party.memberProfileId ? profilesById.get(party.memberProfileId) : undefined;
+
+    if (!profile) {
+      profile = profilesByName.get(normalizeName(party.name));
+    }
+
+    if (!profile) {
+      const timestamp = nowIso();
+      profile = {
+        id: makeId(),
+        name: party.name.trim(),
+        defaultHeadcount: party.defaultHeadcount,
+        note: party.note?.trim(),
+        sortOrder: nextSortOrder++,
+        active: party.active,
+        createdAt: timestamp,
+        updatedAt: timestamp,
+      };
+      createdProfiles.push(profile);
+      profilesById.set(profile.id, profile);
+      profilesByName.set(normalizeName(profile.name), profile);
+    }
+
+    if (party.memberProfileId !== profile.id) {
+      updatedParties.push({ ...party, memberProfileId: profile.id });
+    }
+  }
+
+  await Promise.all([
+    ...createdProfiles.map((profile) => addRecord(STORE_NAMES.memberProfiles, profile)),
+    ...updatedParties.map((party) => putRecord(STORE_NAMES.parties, party)),
+  ]);
+
+  const finalParties = parties.map((party) => updatedParties.find((item) => item.id === party.id) ?? party);
+  const finalProfiles = sortMemberProfiles([...memberProfiles, ...createdProfiles]);
+  return { memberProfiles: finalProfiles, parties: finalParties };
+}
+
+function resolveMemberProfileIdFromDeposit(deposit: Deposit, partyById: Map<string, Party>): string | undefined {
+  return deposit.memberProfileId ?? (deposit.partyId ? partyById.get(deposit.partyId)?.memberProfileId : undefined);
+}
+
 async function normalizeLedgerRecords(params: { deposits: Deposit[]; expenses: Expense[] }): Promise<{ deposits: Deposit[]; expenses: Expense[] }> {
   const mixed = [
     ...params.deposits.map((record, index) => ({ type: 'deposit' as const, record, index })),
@@ -199,6 +273,88 @@ export async function listTrips(): Promise<Trip[]> {
   return trips.sort((left, right) => right.createdAt.localeCompare(left.createdAt));
 }
 
+export async function listMemberProfiles(): Promise<MemberProfile[]> {
+  const { memberProfiles } = await ensureMemberProfilesLinked();
+  return memberProfiles;
+}
+
+export async function createMemberProfile(input: {
+  name: string;
+  defaultHeadcount: number;
+  note?: string;
+}): Promise<MemberProfile> {
+  const existingProfiles = await listMemberProfiles();
+  const timestamp = nowIso();
+  const profile: MemberProfile = {
+    id: makeId(),
+    name: input.name.trim(),
+    defaultHeadcount: input.defaultHeadcount,
+    note: input.note?.trim(),
+    sortOrder: existingProfiles.length,
+    active: true,
+    createdAt: timestamp,
+    updatedAt: timestamp,
+  };
+
+  return addRecord(STORE_NAMES.memberProfiles, profile);
+}
+
+export async function updateMemberProfile(profile: MemberProfile): Promise<MemberProfile> {
+  return putRecord(STORE_NAMES.memberProfiles, {
+    ...profile,
+    name: profile.name.trim(),
+    note: profile.note?.trim(),
+    updatedAt: nowIso(),
+  });
+}
+
+export async function getHomeBundle(): Promise<HomeBundle> {
+  const [{ memberProfiles, parties }, trips, rawDeposits, rawExpenses, expenseParticipants] = await Promise.all([
+    ensureMemberProfilesLinked(),
+    listTrips(),
+    getAll<Deposit>(STORE_NAMES.deposits),
+    getAll<Expense>(STORE_NAMES.expenses),
+    getAll<ExpenseParticipant>(STORE_NAMES.expenseParticipants),
+  ]);
+
+  const { deposits, expenses } = await normalizeLedgerRecords({
+    deposits: rawDeposits,
+    expenses: rawExpenses,
+  });
+
+  return {
+    trips,
+    memberProfiles,
+    parties: [...parties].sort((left, right) => left.sortOrder - right.sortOrder || left.name.localeCompare(right.name)),
+    deposits: sortByStableOrderDesc(deposits),
+    expenses: sortByStableOrderDesc(expenses),
+    expenseParticipants,
+  };
+}
+
+async function seedTripPartiesFromMembers(tripId: string, members?: MemberProfile[]): Promise<Party[]> {
+  const sourceMembers = members ?? await listMemberProfiles();
+  const activeMembers = sortMemberProfiles(sourceMembers.filter((member) => member.active));
+
+  if (activeMembers.length === 0) {
+    return [];
+  }
+
+  const createdParties: Party[] = activeMembers.map((member, index) => ({
+    id: makeId(),
+    tripId,
+    memberProfileId: member.id,
+    name: member.name.trim(),
+    defaultHeadcount: member.defaultHeadcount,
+    note: member.note?.trim(),
+    sortOrder: index,
+    active: true,
+  }));
+
+  await Promise.all(createdParties.map((party) => addRecord(STORE_NAMES.parties, party)));
+  return createdParties;
+}
+
 export async function createTrip(input: {
   name: string;
   startDate?: string;
@@ -216,7 +372,9 @@ export async function createTrip(input: {
     updatedAt: timestamp,
   };
 
-  return addRecord(STORE_NAMES.trips, trip);
+  await addRecord(STORE_NAMES.trips, trip);
+  await seedTripPartiesFromMembers(trip.id);
+  return trip;
 }
 
 export async function getTripBundle(tripId: string): Promise<TripBundle | null> {
@@ -226,12 +384,15 @@ export async function getTripBundle(tripId: string): Promise<TripBundle | null> 
     return null;
   }
 
-  const [parties, rawDeposits, rawExpenses, allParticipants] = await Promise.all([
+  const [loadedParties, rawDeposits, rawExpenses, allParticipants, members] = await Promise.all([
     getAllByIndex<Party>(STORE_NAMES.parties, 'tripId', tripId),
     getAllByIndex<Deposit>(STORE_NAMES.deposits, 'tripId', tripId),
     getAllByIndex<Expense>(STORE_NAMES.expenses, 'tripId', tripId),
     getAll<ExpenseParticipant>(STORE_NAMES.expenseParticipants),
+    listMemberProfiles(),
   ]);
+
+  const parties = loadedParties.length > 0 ? loadedParties : await seedTripPartiesFromMembers(tripId, members);
 
   const { deposits, expenses } = await normalizeLedgerRecords({
     deposits: rawDeposits,
@@ -256,11 +417,39 @@ export async function createParty(input: {
   defaultHeadcount: number;
   note?: string;
   sortOrder: number;
+  memberProfileId?: string;
 }): Promise<Party> {
+  const normalizedName = input.name.trim();
+  let memberProfileId = input.memberProfileId;
+
+  if (!memberProfileId) {
+    const profiles = await listMemberProfiles();
+    const matchedProfile = profiles.find((profile) => normalizeName(profile.name) === normalizeName(normalizedName));
+
+    if (matchedProfile) {
+      memberProfileId = matchedProfile.id;
+    } else {
+      const timestamp = nowIso();
+      const profile: MemberProfile = {
+        id: makeId(),
+        name: normalizedName,
+        defaultHeadcount: input.defaultHeadcount,
+        note: input.note?.trim(),
+        sortOrder: profiles.length,
+        active: true,
+        createdAt: timestamp,
+        updatedAt: timestamp,
+      };
+      await addRecord(STORE_NAMES.memberProfiles, profile);
+      memberProfileId = profile.id;
+    }
+  }
+
   const party: Party = {
     id: makeId(),
     tripId: input.tripId,
-    name: input.name.trim(),
+    memberProfileId,
+    name: normalizedName,
     defaultHeadcount: input.defaultHeadcount,
     note: input.note?.trim(),
     sortOrder: input.sortOrder,
@@ -271,22 +460,36 @@ export async function createParty(input: {
 }
 
 export async function updateParty(party: Party): Promise<Party> {
-  return putRecord(STORE_NAMES.parties, party);
+  if (party.memberProfileId) {
+    return putRecord(STORE_NAMES.parties, party);
+  }
+
+  const profiles = await listMemberProfiles();
+  const matchedProfile = profiles.find((profile) => normalizeName(profile.name) === normalizeName(party.name));
+  return putRecord(STORE_NAMES.parties, {
+    ...party,
+    memberProfileId: matchedProfile?.id,
+  });
 }
 
 export async function createDeposit(input: {
-  tripId: string;
-  partyId: string;
+  tripId?: string;
+  partyId?: string;
+  memberProfileId?: string;
   amountCents: number;
   paidAt: string;
   note?: string;
 }): Promise<Deposit> {
   const timestamp = nowIso();
-  const party = await getById<Party>(STORE_NAMES.parties, input.partyId);
+  const party = input.partyId ? await getById<Party>(STORE_NAMES.parties, input.partyId) : undefined;
+  const memberProfileId = input.memberProfileId ?? party?.memberProfileId;
+  const memberProfile = memberProfileId ? await getById<MemberProfile>(STORE_NAMES.memberProfiles, memberProfileId) : undefined;
+  const displayName = memberProfile?.name ?? party?.name ?? '未命名';
   const deposit: Deposit = {
     id: makeId(),
     tripId: input.tripId,
     partyId: input.partyId,
+    memberProfileId,
     amountCents: input.amountCents,
     paidAt: input.paidAt,
     note: input.note?.trim(),
@@ -299,7 +502,7 @@ export async function createDeposit(input: {
       buildAuditEntry({
         action: 'created',
         afterSummary: buildDepositSummary({
-          partyName: party?.name ?? '未命名',
+          partyName: displayName,
           amountCents: input.amountCents,
           paidAt: input.paidAt,
           note: input.note,
@@ -315,24 +518,33 @@ export async function updateDeposit(input: {
   depositId: string;
   amountCents: number;
   paidAt: string;
-  partyId: string;
+  partyId?: string;
+  memberProfileId?: string;
   note?: string;
   reason?: string;
 }): Promise<Deposit> {
   const existing = await getById<Deposit>(STORE_NAMES.deposits, input.depositId);
 
   if (!existing) {
-    throw new Error('没找到这笔成员入金');
+    throw new Error('没找到这笔成员交款');
   }
 
-  const [beforeParty, afterParty] = await Promise.all([
-    getById<Party>(STORE_NAMES.parties, existing.partyId),
-    getById<Party>(STORE_NAMES.parties, input.partyId),
+  const [beforeParty, nextParty] = await Promise.all([
+    existing.partyId ? getById<Party>(STORE_NAMES.parties, existing.partyId) : Promise.resolve(undefined),
+    input.partyId ? getById<Party>(STORE_NAMES.parties, input.partyId) : Promise.resolve(undefined),
+  ]);
+  const beforeMemberProfileId = existing.memberProfileId ?? beforeParty?.memberProfileId;
+  const afterMemberProfileId = input.memberProfileId ?? nextParty?.memberProfileId ?? beforeMemberProfileId;
+  const [beforeMember, afterMember] = await Promise.all([
+    beforeMemberProfileId ? getById<MemberProfile>(STORE_NAMES.memberProfiles, beforeMemberProfileId) : Promise.resolve(undefined),
+    afterMemberProfileId ? getById<MemberProfile>(STORE_NAMES.memberProfiles, afterMemberProfileId) : Promise.resolve(undefined),
   ]);
 
   const updated: Deposit = {
     ...existing,
+    tripId: input.partyId ? existing.tripId : existing.tripId,
     partyId: input.partyId,
+    memberProfileId: afterMemberProfileId,
     amountCents: input.amountCents,
     paidAt: input.paidAt,
     note: input.note?.trim(),
@@ -345,13 +557,13 @@ export async function updateDeposit(input: {
         action: 'updated',
         reason: input.reason,
         beforeSummary: buildDepositSummary({
-          partyName: beforeParty?.name ?? '未命名',
+          partyName: beforeMember?.name ?? beforeParty?.name ?? '未命名',
           amountCents: existing.amountCents,
           paidAt: existing.paidAt,
           note: existing.note,
         }),
         afterSummary: buildDepositSummary({
-          partyName: afterParty?.name ?? '未命名',
+          partyName: afterMember?.name ?? nextParty?.name ?? '未命名',
           amountCents: input.amountCents,
           paidAt: input.paidAt,
           note: input.note,
@@ -367,12 +579,14 @@ export async function voidDeposit(input: { depositId: string; reason: string }):
   const existing = await getById<Deposit>(STORE_NAMES.deposits, input.depositId);
 
   if (!existing) {
-    throw new Error('没找到这笔成员入金');
+    throw new Error('没找到这笔成员交款');
   }
 
-  const party = await getById<Party>(STORE_NAMES.parties, existing.partyId);
+  const party = existing.partyId ? await getById<Party>(STORE_NAMES.parties, existing.partyId) : undefined;
+  const memberProfileId = existing.memberProfileId ?? party?.memberProfileId;
+  const memberProfile = memberProfileId ? await getById<MemberProfile>(STORE_NAMES.memberProfiles, memberProfileId) : undefined;
   const beforeSummary = buildDepositSummary({
-    partyName: party?.name ?? '未命名',
+    partyName: memberProfile?.name ?? party?.name ?? '未命名',
     amountCents: existing.amountCents,
     paidAt: existing.paidAt,
     note: existing.note,
@@ -392,7 +606,7 @@ export async function voidDeposit(input: { depositId: string; reason: string }):
         action: 'voided',
         reason: input.reason,
         beforeSummary,
-        afterSummary: `这笔成员入金已作废，不再计入总账。原记录：${beforeSummary}`,
+        afterSummary: `这笔成员交款已作废，不再计入总账。原记录：${beforeSummary}`,
       }),
     ],
   };

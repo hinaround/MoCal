@@ -25,9 +25,21 @@ export interface Trip {
   updatedAt: string;
 }
 
+export interface MemberProfile {
+  id: Id;
+  name: string;
+  defaultHeadcount: number;
+  note?: string;
+  sortOrder: number;
+  active: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface Party {
   id: Id;
   tripId: Id;
+  memberProfileId?: Id;
   name: string;
   defaultHeadcount: number;
   note?: string;
@@ -37,8 +49,9 @@ export interface Party {
 
 export interface Deposit {
   id: Id;
-  tripId: Id;
-  partyId: Id;
+  tripId?: Id;
+  partyId?: Id;
+  memberProfileId?: Id;
   amountCents: number;
   paidAt: string;
   note?: string;

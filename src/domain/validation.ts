@@ -36,6 +36,38 @@ export function buildExpenseConfirmationSentence(input: ExpenseDraftInput): stri
   return `${titlePrefix}${amountLabel} 元，${payerLabel}，由 ${participantLabel} 一起分，${shareLabel}。`;
 }
 
+function formatSentenceAmount(cents: number): string {
+  const amount = (cents / 100).toFixed(2);
+  return amount.endsWith('.00') ? amount.slice(0, -3) : amount;
+}
+
+export function buildAllocationBreakdownSentence(input: {
+  shareMode: ShareMode;
+  allocations: Array<{ partyId: string; headcountSnapshot: number; shareAmountCents: number }>;
+  partyNamesById: Map<string, string>;
+}): string {
+  if (input.allocations.length === 0) {
+    return '';
+  }
+
+  if (input.shareMode === 'by_headcount') {
+    return input.allocations
+      .map((line) => `${input.partyNamesById.get(line.partyId) ?? '未命名'} ${line.headcountSnapshot} 人分 ${formatSentenceAmount(line.shareAmountCents)} 元`)
+      .join('，');
+  }
+
+  const partyNames = input.allocations.map((line) => input.partyNamesById.get(line.partyId) ?? '未命名');
+  const distinctShares = new Set(input.allocations.map((line) => line.shareAmountCents));
+
+  if (distinctShares.size === 1) {
+    return `${partyNames.join('、')} 每家各分 ${formatSentenceAmount(input.allocations[0].shareAmountCents)} 元`;
+  }
+
+  return `按家平分后：${input.allocations
+    .map((line) => `${input.partyNamesById.get(line.partyId) ?? '未命名'} 分 ${formatSentenceAmount(line.shareAmountCents)} 元`)
+    .join('，')}`;
+}
+
 export function validateExpenseDraft(input: ExpenseDraftInput): DraftIssue[] {
   const issues: DraftIssue[] = [];
 
@@ -68,6 +100,24 @@ export function validateExpenseDraft(input: ExpenseDraftInput): DraftIssue[] {
     }
   }
 
+  if (input.shareMode === 'by_party' && input.participants.length > 1) {
+    const validParticipants = input.participants.filter(
+      (participant) => Number.isInteger(participant.headcountSnapshot) && participant.headcountSnapshot > 0,
+    );
+    const distinctHeadcounts = new Set(validParticipants.map((participant) => participant.headcountSnapshot));
+
+    if (distinctHeadcounts.size > 1) {
+      const participantSummary = validParticipants
+        .map((participant) => `${input.partyNamesById.get(participant.partyId) ?? '未命名'} ${participant.headcountSnapshot}人`)
+        .join('、');
+
+      issues.push({
+        level: 'confirm',
+        message: `注意：你现在选的是“按家数平分”，不会按人数算。当前是 ${participantSummary}，如果想按人头分，请改成“按实际到场人数分”。`,
+      });
+    }
+  }
+
   if (
     input.payerKind === 'pool' &&
     input.amountCents !== null &&
@@ -75,7 +125,7 @@ export function validateExpenseDraft(input: ExpenseDraftInput): DraftIssue[] {
   ) {
     issues.push({
       level: 'error',
-      message: '公账余额不够支付这笔，请改成某家代付，或先记一笔成员入金',
+      message: '公账余额不够支付这笔，请改成某家代付，或先记一笔成员交款',
     });
   }
 

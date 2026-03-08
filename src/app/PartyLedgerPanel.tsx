@@ -8,6 +8,9 @@ interface PartyLedgerPanelProps {
   bundle: TripBundle;
   saving: boolean;
   selectedPartyId: string;
+  showHeader?: boolean;
+  title?: string;
+  description?: string;
   onChangeSelectedPartyId: (partyId: string) => void;
   onEditDeposit: (depositId: string) => void;
   onVoidDeposit: (input: { depositId: string; reason: string }) => Promise<void>;
@@ -18,7 +21,19 @@ interface PartyLedgerPanelProps {
 type VoidTarget = { kind: 'deposit' | 'expense'; id: string; summary: string; title: string } | null;
 
 export function PartyLedgerPanel(props: PartyLedgerPanelProps) {
-  const { bundle, saving, selectedPartyId, onChangeSelectedPartyId, onEditDeposit, onVoidDeposit, onEditExpense, onVoidExpense } = props;
+  const {
+    bundle,
+    saving,
+    selectedPartyId,
+    showHeader = true,
+    title = '单家明细',
+    description = '有人质疑时，直接打开这一页：这家累计交款、代付、分摊和当前余额都能一路解释清楚。',
+    onChangeSelectedPartyId,
+    onEditDeposit,
+    onVoidDeposit,
+    onEditExpense,
+    onVoidExpense,
+  } = props;
   const selectedParty = bundle.parties.find((party) => party.id === selectedPartyId) ?? bundle.parties[0];
   const [voidTarget, setVoidTarget] = useState<VoidTarget>(null);
 
@@ -43,13 +58,15 @@ export function PartyLedgerPanel(props: PartyLedgerPanelProps) {
   const summary = ledger.summary;
 
   return (
-    <section className="panel-card">
-      <div className="section-heading">
-        <div>
-          <h2>成员账户</h2>
-          <p>有人质疑时，直接打开这一页：这家累计入金、代付、分摊和当前余额都能一路解释清楚。</p>
+    <section className="panel-card compact-top-gap">
+      {showHeader ? (
+        <div className="section-heading">
+          <div>
+            <h2>{title}</h2>
+            <p>{description}</p>
+          </div>
         </div>
-      </div>
+      ) : null}
 
       <label>
         <span>查看哪一家</span>
@@ -65,7 +82,7 @@ export function PartyLedgerPanel(props: PartyLedgerPanelProps) {
           <p className="eyebrow">单家解释图</p>
           <h3>{selectedParty.name}</h3>
           <div className="screenshot-grid">
-            <div><span>累计入金</span><strong>{formatCurrency(summary.depositCents)}</strong></div>
+            <div><span>累计交款</span><strong>{formatCurrency(summary.depositCents)}</strong></div>
             <div><span>代付金额</span><strong>{formatCurrency(summary.directPaidCents)}</strong></div>
             <div><span>已分摊金额</span><strong>{formatCurrency(summary.totalShareCents)}</strong></div>
             <div><span>当前余额</span><strong className={summary.netCents >= 0 ? 'good-text' : 'warn-text'}>{formatBalanceLabel(summary.netCents)}</strong></div>
@@ -101,19 +118,19 @@ export function PartyLedgerPanel(props: PartyLedgerPanelProps) {
                       {item.sourceType === 'deposit' ? (
                         <>
                           <button type="button" className="ghost-button small-button" onClick={(event) => { event.preventDefault(); event.stopPropagation(); onEditDeposit(item.sourceId); }}>
-                            调整账目
+                            改这笔
                           </button>
-                          <button type="button" className="ghost-button small-button danger-button" onClick={(event) => { event.preventDefault(); event.stopPropagation(); setVoidTarget({ kind: 'deposit', id: item.sourceId, summary: item.dialogSummary, title: '作废这笔成员入金' }); }}>
-                            作废账目
+                          <button type="button" className="ghost-button small-button danger-button" onClick={(event) => { event.preventDefault(); event.stopPropagation(); setVoidTarget({ kind: 'deposit', id: item.sourceId, summary: item.dialogSummary, title: '作废这笔成员交款' }); }}>
+                            作废这笔
                           </button>
                         </>
                       ) : (
                         <>
                           <button type="button" className="ghost-button small-button" onClick={(event) => { event.preventDefault(); event.stopPropagation(); onEditExpense(item.sourceId); }}>
-                            调整账目
+                            改这笔
                           </button>
                           <button type="button" className="ghost-button small-button danger-button" onClick={(event) => { event.preventDefault(); event.stopPropagation(); setVoidTarget({ kind: 'expense', id: item.sourceId, summary: item.dialogSummary, title: '作废这笔支出' }); }}>
-                            作废账目
+                            作废这笔
                           </button>
                         </>
                       )}

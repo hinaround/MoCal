@@ -1,37 +1,28 @@
-import { useEffect, useState, type FormEvent } from 'react';
-import type { Party } from '../domain/types';
+import { useState, type FormEvent } from 'react';
+import type { MemberProfile } from '../domain/types';
 
-interface FamilyRosterPanelProps {
-  parties: Party[];
+interface MemberProfilesPanelProps {
+  members: MemberProfile[];
   saving: boolean;
-  onCreateParty: (input: { name: string; defaultHeadcount: number; note?: string }) => Promise<void>;
-  onUpdateParty: (party: Party) => Promise<void>;
+  onCreate: (input: { name: string; defaultHeadcount: number; note?: string }) => Promise<void>;
+  onUpdate: (member: MemberProfile) => Promise<void>;
 }
 
-function PartyEditor(props: { party: Party; saving: boolean; onSave: (party: Party) => Promise<void> }) {
-  const { party, saving, onSave } = props;
-  const [name, setName] = useState(party.name);
-  const [defaultHeadcount, setDefaultHeadcount] = useState(String(party.defaultHeadcount));
-  const [note, setNote] = useState(party.note ?? '');
-  const [active, setActive] = useState(party.active);
-
-  useEffect(() => {
-    setName(party.name);
-    setDefaultHeadcount(String(party.defaultHeadcount));
-    setNote(party.note ?? '');
-    setActive(party.active);
-  }, [party]);
+function MemberEditor(props: { member: MemberProfile; saving: boolean; onSave: (member: MemberProfile) => Promise<void> }) {
+  const { member, saving, onSave } = props;
+  const [name, setName] = useState(member.name);
+  const [defaultHeadcount, setDefaultHeadcount] = useState(String(member.defaultHeadcount));
+  const [note, setNote] = useState(member.note ?? '');
+  const [active, setActive] = useState(member.active);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const headcount = Number(defaultHeadcount);
-
     if (!name.trim() || !Number.isInteger(headcount) || headcount <= 0) {
       return;
     }
-
     await onSave({
-      ...party,
+      ...member,
       name: name.trim(),
       defaultHeadcount: headcount,
       note: note.trim() || undefined,
@@ -54,7 +45,7 @@ function PartyEditor(props: { party: Party; saving: boolean; onSave: (party: Par
         <input value={note} onChange={(event) => setNote(event.target.value)} placeholder="例如：这次带一个孩子" />
       </label>
       <label className="toggle-field">
-        <span>当前还参加</span>
+        <span>当前启用</span>
         <input type="checkbox" checked={active} onChange={(event) => setActive(event.target.checked)} />
       </label>
       <button className="secondary-button" type="submit" disabled={saving}>保存</button>
@@ -62,8 +53,8 @@ function PartyEditor(props: { party: Party; saving: boolean; onSave: (party: Par
   );
 }
 
-export function FamilyRosterPanel(props: FamilyRosterPanelProps) {
-  const { parties, saving, onCreateParty, onUpdateParty } = props;
+export function MemberProfilesPanel(props: MemberProfilesPanelProps) {
+  const { members, saving, onCreate, onUpdate } = props;
   const [name, setName] = useState('');
   const [defaultHeadcount, setDefaultHeadcount] = useState('2');
   const [note, setNote] = useState('');
@@ -71,28 +62,25 @@ export function FamilyRosterPanel(props: FamilyRosterPanelProps) {
   async function handleCreate(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const headcount = Number(defaultHeadcount);
-
     if (!name.trim() || !Number.isInteger(headcount) || headcount <= 0) {
       return;
     }
-
-    await onCreateParty({
+    await onCreate({
       name,
       defaultHeadcount: headcount,
       note: note || undefined,
     });
-
     setName('');
     setDefaultHeadcount('2');
     setNote('');
   }
 
   return (
-    <section className="panel-card">
+    <section className="panel-card compact-top-gap">
       <div className="section-heading">
         <div>
-          <h2>成员名单</h2>
-          <p>名单只录一次，后面记账都从这里点选，不再反复手打人名。就算还没参加过任何支出，也可以先在这里建成员，再去成员交款。</p>
+          <h2>成员管理</h2>
+          <p>成员是全局的。先把人录进来，后面记交款、拉进活动、看单家历史都可以直接点，不用反复手打。</p>
         </div>
       </div>
 
@@ -109,10 +97,10 @@ export function FamilyRosterPanel(props: FamilyRosterPanelProps) {
           </label>
           <label>
             <span>备注</span>
-            <input value={note} onChange={(event) => setNote(event.target.value)} placeholder="例如：这次不住酒店" />
+            <input value={note} onChange={(event) => setNote(event.target.value)} placeholder="例如：平时 2 大 1 小" />
           </label>
           <button type="submit" className="primary-button" disabled={saving || !name.trim()}>
-            加入当前活动
+            新建成员
           </button>
         </form>
       </article>
@@ -120,14 +108,19 @@ export function FamilyRosterPanel(props: FamilyRosterPanelProps) {
       <div className="section-heading compact-gap compact-top-gap">
         <div>
           <h3>成员列表</h3>
-          <p>可以修改名称、默认人数、备注，也可以先停用某家，但旧账不会变。</p>
+          <p>这里改的是全局成员资料。后面每次活动都能直接拿来用。</p>
         </div>
       </div>
 
       <div className="stack-list roster-list">
-        {parties.map((party) => (
-          <PartyEditor key={party.id} party={party} saving={saving} onSave={onUpdateParty} />
-        ))}
+        {members.length === 0 ? (
+          <article className="inline-card">
+            <strong>还没有成员</strong>
+            <p className="storage-note">先新增一个成员，后面就可以直接记交款，也可以把她加入某次活动。</p>
+          </article>
+        ) : (
+          members.map((member) => <MemberEditor key={member.id} member={member} saving={saving} onSave={onUpdate} />)
+        )}
       </div>
     </section>
   );

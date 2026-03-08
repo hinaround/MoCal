@@ -11,6 +11,7 @@ interface DepositLedgerPanelProps {
   poolBalanceCents: number;
   editingDeposit?: Deposit | null;
   depositTimeline?: FullLedgerItem[];
+  historyLimit?: number;
   onSave: (input: {
     depositId?: string;
     partyId: string;
@@ -22,6 +23,7 @@ interface DepositLedgerPanelProps {
   onVoid: (input: { depositId: string; reason: string }) => Promise<void>;
   onCancelEdit?: () => void;
   onOpenFamilies?: () => void;
+  onOpenFullHistory?: () => void;
 }
 
 interface DepositDraftState {
@@ -47,7 +49,7 @@ function buildBlankDraft(): DepositDraftState {
 
 function buildDraftFromDeposit(deposit: Deposit): DepositDraftState {
   return {
-    partyId: deposit.partyId,
+    partyId: deposit.partyId ?? '',
     amount: String(deposit.amountCents / 100),
     paidAt: deposit.paidAt,
     note: deposit.note ?? '',
@@ -57,11 +59,24 @@ function buildDraftFromDeposit(deposit: Deposit): DepositDraftState {
 
 function buildDepositSummary(deposit: Deposit, parties: Party[]): string {
   const partyName = parties.find((party) => party.id === deposit.partyId)?.name ?? '未命名';
-  return `${partyName}成员入金 · ${formatCurrency(deposit.amountCents)} · ${formatDateLabel(deposit.paidAt)}${deposit.note?.trim() ? ` · 备注：${deposit.note.trim()}` : ''}`;
+  return `${partyName}成员交款 · ${formatCurrency(deposit.amountCents)} · ${formatDateLabel(deposit.paidAt)}${deposit.note?.trim() ? ` · 备注：${deposit.note.trim()}` : ''}`;
 }
 
 export function DepositLedgerPanel(props: DepositLedgerPanelProps) {
-  const { parties, deposits, saving, poolBalanceCents, editingDeposit, depositTimeline = [], onSave, onVoid, onCancelEdit, onOpenFamilies } = props;
+  const {
+    parties,
+    deposits,
+    saving,
+    poolBalanceCents,
+    editingDeposit,
+    depositTimeline = [],
+    historyLimit,
+    onSave,
+    onVoid,
+    onCancelEdit,
+    onOpenFamilies,
+    onOpenFullHistory,
+  } = props;
   const [localEditingDepositId, setLocalEditingDepositId] = useState<string | null>(null);
   const [draft, setDraft] = useState<DepositDraftState>(buildBlankDraft());
   const [fieldErrors, setFieldErrors] = useState<DepositFieldErrors>({});
@@ -80,6 +95,19 @@ export function DepositLedgerPanel(props: DepositLedgerPanelProps) {
     () => new Map(depositTimeline.filter((item) => item.type === 'deposit').map((item) => [item.id, item])),
     [depositTimeline],
   );
+
+  const orderedDeposits = useMemo(() => {
+    const depositsById = new Map(deposits.map((deposit) => [deposit.id, deposit]));
+    const idsFromTimeline = depositTimeline.filter((item) => item.type === 'deposit').map((item) => item.id);
+    const merged = idsFromTimeline.map((id) => depositsById.get(id)).filter((item): item is Deposit => Boolean(item));
+    if (merged.length === deposits.length) {
+      return [...merged].reverse();
+    }
+    return [...deposits].reverse();
+  }, [depositTimeline, deposits]);
+
+  const visibleDeposits = historyLimit ? orderedDeposits.slice(0, historyLimit) : orderedDeposits;
+  const hasHiddenHistory = typeof historyLimit === 'number' && orderedDeposits.length > historyLimit;
 
   useEffect(() => {
     if (activeEditingDeposit) {
@@ -122,7 +150,7 @@ export function DepositLedgerPanel(props: DepositLedgerPanelProps) {
     const amountCents = parseAmountToCents(draft.amount);
 
     if (!draft.partyId) {
-      errors.partyId = '请先选哪一家入金';
+      errors.partyId = '请先选哪一家交款';
     }
 
     if (!normalizedAmount) {
@@ -170,15 +198,15 @@ export function DepositLedgerPanel(props: DepositLedgerPanelProps) {
   const currentEffect = activeEditingDeposit && (activeEditingDeposit.status ?? 'posted') === 'posted' ? activeEditingDeposit.amountCents : 0;
   const projectedBalance = liveAmountCents !== null ? poolBalanceCents - currentEffect + liveAmountCents : null;
   const liveSentence = livePartyName && liveAmountCents !== null && liveAmountCents > 0
-    ? `${livePartyName}本次入金 ${formatCurrency(liveAmountCents)}。这不是支出，只是把经费记进公账。正式入账后，公账可用余额会变成 ${formatCurrency(projectedBalance ?? poolBalanceCents)}。`
-    : '先选成员，再填写入金金额。';
+    ? `${livePartyName}本次交款 ${formatCurrency(liveAmountCents)}。这不是支出，只是把经费记进公账。正式入账后，公账余额会变成 ${formatCurrency(projectedBalance ?? poolBalanceCents)}。`
+    : '先选成员，再填写交款金额。';
 
   return (
-    <section className="panel-card form-panel with-sticky-bar">
+    <section className="panel-card form-panel with-sticky-bar compact-top-gap">
       <div className="section-heading">
         <div>
-          <h2>{activeEditingDeposit ? '调整这笔成员入金' : '成员入金'}</h2>
-          <p>这里记的是成员先交上来的经费，不是支出。只要已经在当前账本成员名单里，就算还没参加过任何支出，也可以先入金。</p>
+          <h2>{activeEditingDeposit ? '调整这笔成员交款' : '成员交款'}</h2>
+          <p>这里记的是成员先交上来的经费，不是支出。只要已经在当前活动成员名单里，就算还没参加过任何支出，也可以先交款。</p>
         </div>
         {activeEditingDeposit ? (
           <button type="button" className="ghost-button" onClick={resetForm}>
@@ -190,7 +218,7 @@ export function DepositLedgerPanel(props: DepositLedgerPanelProps) {
       {parties.length === 0 ? (
         <article className="inline-card compact-top-gap">
           <strong>还没有成员</strong>
-          <p>成员入金不需要先参加过支出，但要先把成员加进当前账本。先去成员名单加一个成员，再回来入金。</p>
+          <p>成员交款不需要先参加过支出，但要先把成员加进当前活动。先去成员名单加一个成员，再回来交款。</p>
           {onOpenFamilies ? (
             <div className="action-row">
               <button type="button" className="ghost-button small-button" onClick={onOpenFamilies}>
@@ -210,7 +238,7 @@ export function DepositLedgerPanel(props: DepositLedgerPanelProps) {
 
       <div className="stack-form compact-form">
         <label ref={partyFieldRef}>
-          <span>哪一家入金</span>
+          <span>哪一家交款</span>
           <select
             value={draft.partyId}
             onChange={(event) => {
@@ -227,7 +255,7 @@ export function DepositLedgerPanel(props: DepositLedgerPanelProps) {
         </label>
 
         <label ref={amountFieldRef}>
-          <span>入金金额</span>
+          <span>交款金额</span>
           <input
             value={draft.amount}
             onChange={(event) => {
@@ -266,55 +294,71 @@ export function DepositLedgerPanel(props: DepositLedgerPanelProps) {
         ) : null}
       </div>
 
-      <div className="stack-list ledger-list compact-top-gap">
-        {deposits.map((deposit) => {
-          const partyName = parties.find((party) => party.id === deposit.partyId)?.name ?? '未命名';
-          const ledgerItem = timelineByDepositId.get(deposit.id);
-          return (
-            <details key={deposit.id} className="ledger-card detail-disclosure">
-              <summary className="detail-summary detail-summary-actions">
-                <div className="ledger-main">
-                  <div className="history-topline">
-                    <span className={`status-pill ${(deposit.status ?? 'posted') === 'posted' ? 'posted' : 'void'}`}>{formatRecordStatus(deposit.status ?? 'posted')}</span>
-                    <span className="history-date">{formatDateLabel(deposit.paidAt)}</span>
-                  </div>
-                  <strong>成员入金</strong>
-                  <p className="secondary-meta">{partyName}入金</p>
-                </div>
-                <div className="ledger-side">
-                  <strong>{formatCurrency(deposit.amountCents)}</strong>
-                  {(deposit.status ?? 'posted') === 'posted' ? (
-                    <div className="summary-actions">
-                      <button type="button" className="ghost-button small-button" onClick={(event) => { event.preventDefault(); event.stopPropagation(); setLocalEditingDepositId(deposit.id); }}>
-                        调整账目
-                      </button>
-                      <button type="button" className="ghost-button small-button danger-button" onClick={(event) => { event.preventDefault(); event.stopPropagation(); setVoidTarget(deposit); }}>
-                        作废账目
-                      </button>
+      {visibleDeposits.length > 0 ? (
+        <div className="compact-top-gap">
+          <div className="section-heading compact-gap">
+            <div>
+              <h3>{historyLimit ? '最近交款' : '交款记录'}</h3>
+              <p>{historyLimit ? '记账页只放最近几笔，完整流水去查账里看。' : '按时间倒序看清每一笔成员交款。'}</p>
+            </div>
+            {hasHiddenHistory && onOpenFullHistory ? (
+              <button type="button" className="ghost-button small-button" onClick={onOpenFullHistory}>
+                看整本流水
+              </button>
+            ) : null}
+          </div>
+
+          <div className="stack-list ledger-list">
+            {visibleDeposits.map((deposit) => {
+              const partyName = parties.find((party) => party.id === deposit.partyId)?.name ?? '未命名';
+              const ledgerItem = timelineByDepositId.get(deposit.id);
+              return (
+                <details key={deposit.id} className="ledger-card detail-disclosure">
+                  <summary className="detail-summary detail-summary-actions">
+                    <div className="ledger-main">
+                      <div className="history-topline">
+                        <span className={`status-pill ${(deposit.status ?? 'posted') === 'posted' ? 'posted' : 'void'}`}>{formatRecordStatus(deposit.status ?? 'posted')}</span>
+                        <span className="history-date">{formatDateLabel(deposit.paidAt)}</span>
+                      </div>
+                      <strong>成员交款</strong>
+                      <p className="secondary-meta">{partyName}交款</p>
                     </div>
-                  ) : null}
-                </div>
-              </summary>
-              <div className="detail-body">
-                <p>{deposit.note?.trim() ? `备注：${deposit.note.trim()}` : '没写备注。'}</p>
-                {ledgerItem ? (
-                  <p className="pool-note">
-                    {(deposit.status ?? 'posted') === 'posted'
-                      ? `这笔入金后，公账可用余额变成 ${formatCurrency(ledgerItem.poolBalanceAfterCents)}`
-                      : '这笔已作废，不再计入公账'}
-                  </p>
-                ) : null}
-                {deposit.auditTrail && deposit.auditTrail.length > 1 ? <p className="audit-note">{deposit.auditTrail[deposit.auditTrail.length - 1].afterSummary}</p> : null}
-              </div>
-            </details>
-          );
-        })}
-      </div>
+                    <div className="ledger-side">
+                      <strong>{formatCurrency(deposit.amountCents)}</strong>
+                      {(deposit.status ?? 'posted') === 'posted' ? (
+                        <div className="summary-actions">
+                          <button type="button" className="ghost-button small-button" onClick={(event) => { event.preventDefault(); event.stopPropagation(); setLocalEditingDepositId(deposit.id); }}>
+                            改这笔
+                          </button>
+                          <button type="button" className="ghost-button small-button danger-button" onClick={(event) => { event.preventDefault(); event.stopPropagation(); setVoidTarget(deposit); }}>
+                            作废这笔
+                          </button>
+                        </div>
+                      ) : null}
+                    </div>
+                  </summary>
+                  <div className="detail-body">
+                    <p>{deposit.note?.trim() ? `备注：${deposit.note.trim()}` : '没写备注。'}</p>
+                    {ledgerItem ? (
+                      <p className="pool-note">
+                        {(deposit.status ?? 'posted') === 'posted'
+                          ? `这笔交款后，公账余额变成 ${formatCurrency(ledgerItem.poolBalanceAfterCents)}`
+                          : '这笔已作废，不再计入公账'}
+                      </p>
+                    ) : null}
+                    {deposit.auditTrail && deposit.auditTrail.length > 1 ? <p className="audit-note">{deposit.auditTrail[deposit.auditTrail.length - 1].afterSummary}</p> : null}
+                  </div>
+                </details>
+              );
+            })}
+          </div>
+        </div>
+      ) : null}
 
       <div className="sticky-submit-bar">
         <div className="sticky-submit-copy">
           <strong>{liveSentence}</strong>
-          {activeEditingDeposit ? <p>调整原因也会一并记进调整记录里。</p> : <p>正式入账后，这笔会进入公账和总账流水。</p>}
+          {activeEditingDeposit ? <p>调整原因也会一并记进调整记录里。</p> : <p>正式入账后，这笔会进入公账，也会进入整本流水。</p>}
         </div>
         <button type="button" className="primary-button" onClick={() => void handleSubmit()} disabled={saving}>
           {saving ? '正在入账…' : activeEditingDeposit ? '确认保存调整' : '确认正式入账'}
@@ -323,7 +367,7 @@ export function DepositLedgerPanel(props: DepositLedgerPanelProps) {
 
       <ReasonDialog
         open={Boolean(voidTarget)}
-        title="作废这笔成员入金"
+        title="作废这笔成员交款"
         summary={voidTarget ? buildDepositSummary(voidTarget, parties) : ''}
         reasonLabel="作废原因"
         confirmText="确认作废"

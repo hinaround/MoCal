@@ -127,7 +127,7 @@ export function buildFullLedger(params: {
     if (item.type === 'deposit') {
       const deposit = item.record;
       const posted = isPostedRecord(deposit);
-      const partyName = partyNames.get(deposit.partyId) ?? '未命名';
+      const partyName = (deposit.partyId ? partyNames.get(deposit.partyId) : undefined) ?? '未命名';
 
       if (posted) {
         poolBalanceCents += deposit.amountCents;
@@ -138,14 +138,14 @@ export function buildFullLedger(params: {
         date: deposit.paidAt,
         type: 'deposit',
         status: deposit.status ?? 'posted',
-        title: '成员入金',
+        title: '成员交款',
         subtitle: `${partyName}入金 · 这不是支出`,
         amountCents: deposit.amountCents,
         poolDeltaCents: posted ? deposit.amountCents : 0,
         poolBalanceAfterCents: poolBalanceCents,
         explanation: posted ? '这笔会进入公账，后面的公账支出会从这里扣。' : '这笔已作废，不再计入公账。',
         note: deposit.note?.trim(),
-        dialogSummary: `${partyName}成员入金 · ${formatMoney(deposit.amountCents)} · 日期 ${deposit.paidAt}${deposit.note?.trim() ? ` · 备注：${deposit.note.trim()}` : ''}`,
+        dialogSummary: `${partyName}成员交款 · ${formatMoney(deposit.amountCents)} · 日期 ${deposit.paidAt}${deposit.note?.trim() ? ` · 备注：${deposit.note.trim()}` : ''}`,
         shares: [],
         auditNote: buildAuditNote(deposit.auditTrail),
         recordedAt: resolveRecordedAt(deposit),

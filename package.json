@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
-    "test": "vitest run"
+    "test": "vitest run",
+    "test:samples": "vitest run src/domain/__tests__/verificationSamples.test.ts"
   },
   "dependencies": {
     "react": "^19.0.0",
