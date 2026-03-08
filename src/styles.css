@@ -826,3 +826,12 @@ textarea:focus {
 .success-dialog .action-row {
   justify-content: center;
 }
+
+
+.home-shortcuts {
+  margin-top: 4px;
+}
+
+.home-shortcuts .small-button {
+  min-width: 132px;
+}

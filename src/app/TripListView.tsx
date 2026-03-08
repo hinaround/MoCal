@@ -76,12 +76,20 @@ export function TripListView(props: TripListViewProps) {
                   打开当前账本
                 </button>
               </div>
+              <div className="action-row home-shortcuts">
+                <button type="button" className="primary-button small-button" onClick={() => onOpenTrip(quickOpenTrip.id, 'families')}>
+                  先加成员
+                </button>
+                <button type="button" className="ghost-button small-button" onClick={() => onOpenTrip(quickOpenTrip.id, 'deposit')}>
+                  直接成员入金
+                </button>
+              </div>
               <p className="storage-note">当前账本保存在本设备当前浏览器中。换手机、换浏览器或清空浏览器数据，都不会自动同步。</p>
             </>
           ) : (
             <>
               <strong>还没有当前账本</strong>
-              <p className="storage-note">先新建一本账，再从下面四个入口直接进入。</p>
+              <p className="storage-note">先新建一本账。成员必须挂在某一本账下面，所以建好账本后，就能从这里直接先加成员。</p>
             </>
           )}
         </article>
