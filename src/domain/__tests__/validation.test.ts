@@ -14,7 +14,7 @@ describe('validateExpenseDraft', () => {
     });
 
     expect(issues.map((item) => item.message)).toEqual([
-      '请先写这笔花费的短标题',
+      '请先写这笔支出的短标题',
       '请先填写金额',
       '这笔是谁先付的，还没选',
       '这笔还没选谁参加',
@@ -32,7 +32,7 @@ describe('validateExpenseDraft', () => {
       partyNamesById: new Map([['zhang', '张家']]),
     });
 
-    expect(issues.map((item) => item.message)).toContain('大家先收的钱不够支付这笔，请改成某家先垫，或先记一笔收款');
+    expect(issues.map((item) => item.message)).toContain('公账余额不够支付这笔，请改成某家代付，或先记一笔成员入金');
   });
 
   it('会输出普通人能看懂的确认文案和尾差说明', () => {
@@ -64,7 +64,7 @@ describe('validateExpenseDraft', () => {
       ],
     });
 
-    expect(sentence).toBe('“西山晚饭”这笔 360.00 元，先由张家垫上，张家、李家一起出，按参加的家数平分。');
+    expect(sentence).toBe('“西山晚饭”这笔支出 360.00 元，先由张家代付，由 张家、李家 一起分，按参加的家数平分。');
     expect(tailSentence).toBe('这笔不能整分，按固定名单顺序补尾差：张家 +0.01元。');
   });
 });

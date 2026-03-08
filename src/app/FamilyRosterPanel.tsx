@@ -42,7 +42,7 @@ function PartyEditor(props: { party: Party; saving: boolean; onSave: (party: Par
   return (
     <form className="inline-card roster-editor" onSubmit={handleSubmit}>
       <label>
-        <span>名称</span>
+        <span>成员名称</span>
         <input value={name} onChange={(event) => setName(event.target.value)} />
       </label>
       <label>
@@ -54,7 +54,7 @@ function PartyEditor(props: { party: Party; saving: boolean; onSave: (party: Par
         <input value={note} onChange={(event) => setNote(event.target.value)} placeholder="例如：这次带一个孩子" />
       </label>
       <label className="toggle-field">
-        <span>这次还参加</span>
+        <span>当前还参加</span>
         <input type="checkbox" checked={active} onChange={(event) => setActive(event.target.checked)} />
       </label>
       <button className="secondary-button" type="submit" disabled={saving}>保存</button>
@@ -91,28 +91,38 @@ export function FamilyRosterPanel(props: FamilyRosterPanelProps) {
     <section className="panel-card">
       <div className="section-heading">
         <div>
-          <h2>账里有哪些家</h2>
-          <p>名单只录一次，后面记账都从这里点，不再反复手打人名。</p>
+          <h2>成员名单</h2>
+          <p>名单只录一次，后面记账都从这里点选，不再反复手打人名。</p>
         </div>
       </div>
 
-      <form className="stack-form" onSubmit={handleCreate}>
-        <label>
-          <span>名称</span>
-          <input value={name} onChange={(event) => setName(event.target.value)} placeholder="例如：张家" />
-        </label>
-        <label>
-          <span>默认人数</span>
-          <input type="number" min="1" inputMode="numeric" value={defaultHeadcount} onChange={(event) => setDefaultHeadcount(event.target.value)} />
-        </label>
-        <label>
-          <span>备注</span>
-          <input value={note} onChange={(event) => setNote(event.target.value)} placeholder="例如：这次不住酒店" />
-        </label>
-        <button type="submit" className="primary-button" disabled={saving || !name.trim()}>
-          加进这本账
-        </button>
-      </form>
+      <article className="inline-card">
+        <strong>新增成员</strong>
+        <form className="stack-form compact-top-gap" onSubmit={handleCreate}>
+          <label>
+            <span>成员名称</span>
+            <input value={name} onChange={(event) => setName(event.target.value)} placeholder="例如：张家 / 王阿姨" />
+          </label>
+          <label>
+            <span>默认人数</span>
+            <input type="number" min="1" inputMode="numeric" value={defaultHeadcount} onChange={(event) => setDefaultHeadcount(event.target.value)} />
+          </label>
+          <label>
+            <span>备注</span>
+            <input value={note} onChange={(event) => setNote(event.target.value)} placeholder="例如：这次不住酒店" />
+          </label>
+          <button type="submit" className="primary-button" disabled={saving || !name.trim()}>
+            加入当前账本
+          </button>
+        </form>
+      </article>
+
+      <div className="section-heading compact-gap compact-top-gap">
+        <div>
+          <h3>成员列表</h3>
+          <p>可以修改名称、默认人数、备注，也可以先停用某家，但旧账不会变。</p>
+        </div>
+      </div>
 
       <div className="stack-list roster-list">
         {parties.map((party) => (

@@ -24,23 +24,23 @@ export interface DepositDraftInput {
 export function buildExpenseConfirmationSentence(input: ExpenseDraftInput): string {
   const payerLabel =
     input.payerKind === 'pool'
-      ? '从大家先收的钱里出'
-      : `先由${input.partyNamesById.get(input.payerPartyId ?? '') ?? '未选择'}垫上`;
+      ? '从公账支出'
+      : `先由${input.partyNamesById.get(input.payerPartyId ?? '') ?? '未选择'}代付`;
   const participantLabel = input.participants
     .map((participant) => input.partyNamesById.get(participant.partyId) ?? '未命名')
     .join('、');
   const shareLabel = input.shareMode === 'by_party' ? '按参加的家数平分' : '按实际到场人数分';
   const amountLabel = ((input.amountCents ?? 0) / 100).toFixed(2);
-  const titlePrefix = input.title?.trim() ? `“${input.title.trim()}”这笔 ` : '这笔 ';
+  const titlePrefix = input.title?.trim() ? `“${input.title.trim()}”这笔支出 ` : '这笔支出 ';
 
-  return `${titlePrefix}${amountLabel} 元，${payerLabel}，${participantLabel}一起出，${shareLabel}。`;
+  return `${titlePrefix}${amountLabel} 元，${payerLabel}，由 ${participantLabel} 一起分，${shareLabel}。`;
 }
 
 export function validateExpenseDraft(input: ExpenseDraftInput): DraftIssue[] {
   const issues: DraftIssue[] = [];
 
   if (!input.title?.trim()) {
-    issues.push({ level: 'error', message: '请先写这笔花费的短标题' });
+    issues.push({ level: 'error', message: '请先写这笔支出的短标题' });
   }
 
   if (input.amountCents === null) {
@@ -75,7 +75,7 @@ export function validateExpenseDraft(input: ExpenseDraftInput): DraftIssue[] {
   ) {
     issues.push({
       level: 'error',
-      message: '大家先收的钱不够支付这笔，请改成某家先垫，或先记一笔收款',
+      message: '公账余额不够支付这笔，请改成某家代付，或先记一笔成员入金',
     });
   }
 
@@ -83,7 +83,7 @@ export function validateExpenseDraft(input: ExpenseDraftInput): DraftIssue[] {
     const payerName = input.partyNamesById.get(input.payerPartyId) ?? '这家';
     issues.push({
       level: 'confirm',
-      message: `请确认：这笔是先由${payerName}垫上，再按规则分给参加的人。`,
+      message: `请确认：这笔是先由${payerName}代付，再按规则分给参加的人。`,
     });
   }
 
@@ -94,7 +94,7 @@ export function validateDepositDraft(input: DepositDraftInput): DraftIssue[] {
   const issues: DraftIssue[] = [];
 
   if (!input.partyId) {
-    issues.push({ level: 'error', message: '请先选哪一家先交这笔钱' });
+    issues.push({ level: 'error', message: '请先选哪一家入金' });
   }
 
   if (input.amountCents === null) {

@@ -56,7 +56,7 @@ function buildDraftFromDeposit(deposit: Deposit): DepositDraftState {
 
 function buildDepositSummary(deposit: Deposit, parties: Party[]): string {
   const partyName = parties.find((party) => party.id === deposit.partyId)?.name ?? '未命名';
-  return `${partyName}先交的钱 · ${formatCurrency(deposit.amountCents)} · ${formatDateLabel(deposit.paidAt)}${deposit.note?.trim() ? ` · 备注：${deposit.note.trim()}` : ''}`;
+  return `${partyName}成员入金 · ${formatCurrency(deposit.amountCents)} · ${formatDateLabel(deposit.paidAt)}${deposit.note?.trim() ? ` · 备注：${deposit.note.trim()}` : ''}`;
 }
 
 export function DepositLedgerPanel(props: DepositLedgerPanelProps) {
@@ -121,7 +121,7 @@ export function DepositLedgerPanel(props: DepositLedgerPanelProps) {
     const amountCents = parseAmountToCents(draft.amount);
 
     if (!draft.partyId) {
-      errors.partyId = '请先选哪一家先交这笔钱';
+      errors.partyId = '请先选哪一家入金';
     }
 
     if (!normalizedAmount) {
@@ -133,7 +133,7 @@ export function DepositLedgerPanel(props: DepositLedgerPanelProps) {
     }
 
     if (activeEditingDeposit && !draft.reason.trim()) {
-      errors.reason = '这次为什么要改，请写清楚';
+      errors.reason = '请填写调整原因';
     }
 
     return { errors, amountCents };
@@ -169,33 +169,33 @@ export function DepositLedgerPanel(props: DepositLedgerPanelProps) {
   const currentEffect = activeEditingDeposit && (activeEditingDeposit.status ?? 'posted') === 'posted' ? activeEditingDeposit.amountCents : 0;
   const projectedBalance = liveAmountCents !== null ? poolBalanceCents - currentEffect + liveAmountCents : null;
   const liveSentence = livePartyName && liveAmountCents !== null && liveAmountCents > 0
-    ? `${livePartyName}这次先交 ${formatCurrency(liveAmountCents)}。这不是花费，只是先收上来的钱。正式入账后，公账会变成 ${formatCurrency(projectedBalance ?? poolBalanceCents)}。`
-    : '先选哪一家，再填金额。';
+    ? `${livePartyName}本次入金 ${formatCurrency(liveAmountCents)}。这不是支出，只是把经费记进公账。正式入账后，公账可用余额会变成 ${formatCurrency(projectedBalance ?? poolBalanceCents)}。`
+    : '先选成员，再填写入金金额。';
 
   return (
     <section className="panel-card form-panel with-sticky-bar">
       <div className="section-heading">
         <div>
-          <h2>{activeEditingDeposit ? '修改这笔先收的钱' : '先收的钱'}</h2>
-          <p>收款和花费分开记。这里记的是先收上来的钱，不是消费。</p>
+          <h2>{activeEditingDeposit ? '调整这笔成员入金' : '成员入金'}</h2>
+          <p>这里记的是成员先交上来的经费，不是支出。每笔入金都会进入总账流水。</p>
         </div>
         {activeEditingDeposit ? (
           <button type="button" className="ghost-button" onClick={resetForm}>
-            取消修改
+            取消调整
           </button>
         ) : null}
       </div>
 
       {activeEditingDeposit ? (
         <article className="editing-info">
-          <strong>正在修改</strong>
+          <strong>正在调整</strong>
           <p>{buildDepositSummary(activeEditingDeposit, parties)}</p>
         </article>
       ) : null}
 
       <div className="stack-form compact-form">
         <label ref={partyFieldRef}>
-          <span>哪一家先交</span>
+          <span>哪一家入金</span>
           <select
             value={draft.partyId}
             onChange={(event) => {
@@ -212,7 +212,7 @@ export function DepositLedgerPanel(props: DepositLedgerPanelProps) {
         </label>
 
         <label ref={amountFieldRef}>
-          <span>金额</span>
+          <span>入金金额</span>
           <input
             value={draft.amount}
             onChange={(event) => {
@@ -232,12 +232,12 @@ export function DepositLedgerPanel(props: DepositLedgerPanelProps) {
 
         <label>
           <span>备注（可不填）</span>
-          <input value={draft.note} onChange={(event) => setDraft((current) => ({ ...current, note: event.target.value }))} placeholder="例如：出发前先收" />
+          <input value={draft.note} onChange={(event) => setDraft((current) => ({ ...current, note: event.target.value }))} placeholder="例如：出发前先收 / 这次先存一部分" />
         </label>
 
         {activeEditingDeposit ? (
           <label ref={reasonFieldRef}>
-            <span>这次为什么要改</span>
+            <span>调整原因</span>
             <input
               value={draft.reason}
               onChange={(event) => {
@@ -257,17 +257,27 @@ export function DepositLedgerPanel(props: DepositLedgerPanelProps) {
           const ledgerItem = timelineByDepositId.get(deposit.id);
           return (
             <details key={deposit.id} className="ledger-card detail-disclosure">
-              <summary className="detail-summary">
+              <summary className="detail-summary detail-summary-actions">
                 <div className="ledger-main">
                   <div className="history-topline">
                     <span className={`status-pill ${(deposit.status ?? 'posted') === 'posted' ? 'posted' : 'void'}`}>{formatRecordStatus(deposit.status ?? 'posted')}</span>
                     <span className="history-date">{formatDateLabel(deposit.paidAt)}</span>
                   </div>
-                  <strong>先收的钱</strong>
-                  <p className="secondary-meta">{partyName}交来</p>
+                  <strong>成员入金</strong>
+                  <p className="secondary-meta">{partyName}入金</p>
                 </div>
                 <div className="ledger-side">
                   <strong>{formatCurrency(deposit.amountCents)}</strong>
+                  {(deposit.status ?? 'posted') === 'posted' ? (
+                    <div className="summary-actions">
+                      <button type="button" className="ghost-button small-button" onClick={(event) => { event.preventDefault(); event.stopPropagation(); setLocalEditingDepositId(deposit.id); }}>
+                        调整账目
+                      </button>
+                      <button type="button" className="ghost-button small-button danger-button" onClick={(event) => { event.preventDefault(); event.stopPropagation(); setVoidTarget(deposit); }}>
+                        作废账目
+                      </button>
+                    </div>
+                  ) : null}
                 </div>
               </summary>
               <div className="detail-body">
@@ -275,17 +285,11 @@ export function DepositLedgerPanel(props: DepositLedgerPanelProps) {
                 {ledgerItem ? (
                   <p className="pool-note">
                     {(deposit.status ?? 'posted') === 'posted'
-                      ? `这笔收完以后，公账变成 ${formatCurrency(ledgerItem.poolBalanceAfterCents)}`
+                      ? `这笔入金后，公账可用余额变成 ${formatCurrency(ledgerItem.poolBalanceAfterCents)}`
                       : '这笔已作废，不再计入公账'}
                   </p>
                 ) : null}
                 {deposit.auditTrail && deposit.auditTrail.length > 1 ? <p className="audit-note">{deposit.auditTrail[deposit.auditTrail.length - 1].afterSummary}</p> : null}
-                {(deposit.status ?? 'posted') === 'posted' ? (
-                  <div className="mini-actions">
-                    <button type="button" className="ghost-button small-button" onClick={() => setLocalEditingDepositId(deposit.id)}>改这笔</button>
-                    <button type="button" className="ghost-button small-button danger-button" onClick={() => setVoidTarget(deposit)}>作废</button>
-                  </div>
-                ) : null}
               </div>
             </details>
           );
@@ -295,18 +299,18 @@ export function DepositLedgerPanel(props: DepositLedgerPanelProps) {
       <div className="sticky-submit-bar">
         <div className="sticky-submit-copy">
           <strong>{liveSentence}</strong>
-          {activeEditingDeposit ? <p>修改后的原因也会记进审计痕迹里。</p> : <p>正式入账后，这笔会进入公账流水。</p>}
+          {activeEditingDeposit ? <p>调整原因也会一并记进调整记录里。</p> : <p>正式入账后，这笔会进入公账和总账流水。</p>}
         </div>
         <button type="button" className="primary-button" onClick={() => void handleSubmit()} disabled={saving}>
-          {saving ? '正在入账…' : activeEditingDeposit ? '确认保存修改' : '确认正式入账'}
+          {saving ? '正在入账…' : activeEditingDeposit ? '确认保存调整' : '确认正式入账'}
         </button>
       </div>
 
       <ReasonDialog
         open={Boolean(voidTarget)}
-        title="作废这笔先收的钱"
+        title="作废这笔成员入金"
         summary={voidTarget ? buildDepositSummary(voidTarget, parties) : ''}
-        reasonLabel="为什么要作废"
+        reasonLabel="作废原因"
         confirmText="确认作废"
         saving={saving}
         onCancel={() => setVoidTarget(null)}

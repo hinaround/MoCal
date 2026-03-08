@@ -89,7 +89,7 @@ function buildExpenseSummary(expense: Expense, participants: ExpenseParticipant[
   const participantText = participants
     .map((participant) => `${partyNames.get(participant.partyId) ?? '未命名'}${expense.shareMode === 'by_headcount' ? `${participant.headcountSnapshot}人` : ''}`)
     .join('、');
-  const payerText = expense.payerKind === 'pool' ? '从大家先收的钱里出' : `先由${partyNames.get(expense.payerPartyId ?? '') ?? '未命名'}垫上`;
+  const payerText = expense.payerKind === 'pool' ? '从公账支出' : `先由${partyNames.get(expense.payerPartyId ?? '') ?? '未命名'}代付`;
   return `${expense.title?.trim() || '未写标题'} · ${formatCurrency(expense.amountCents)} · ${payerText} · ${participantText}${expense.note?.trim() ? ` · 备注：${expense.note.trim()}` : ''}`;
 }
 
@@ -215,7 +215,7 @@ export function ExpenseComposerPanel(props: ExpenseComposerPanelProps) {
     const participants = buildParticipantsPayload();
 
     if (!draft.title.trim()) {
-      errors.title = '请先写这笔花费的短标题';
+      errors.title = '请先写这笔支出的短标题';
     }
 
     if (!amountText) {
@@ -231,7 +231,7 @@ export function ExpenseComposerPanel(props: ExpenseComposerPanelProps) {
     }
 
     if (draft.payerKind === 'pool' && amountCents !== null && amountCents > poolBalanceCents) {
-      errors.payer = '大家先收的钱不够支付这笔，请改成某家先垫，或先记一笔收款';
+      errors.payer = '公账余额不够支付这笔，请改成某家代付，或先记一笔成员入金';
     }
 
     if (participants.length === 0) {
@@ -246,7 +246,7 @@ export function ExpenseComposerPanel(props: ExpenseComposerPanelProps) {
     }
 
     if (editingExpense && !draft.reason.trim()) {
-      errors.reason = '这次为什么要改，请写清楚';
+      errors.reason = '请填写调整原因';
     }
 
     return { errors, amountCents };
@@ -333,26 +333,26 @@ export function ExpenseComposerPanel(props: ExpenseComposerPanelProps) {
     <section className="panel-card form-panel with-sticky-bar">
       <div className="section-heading">
         <div>
-          <h2>{editingExpense ? '修改这笔花费' : '记一笔花费'}</h2>
-          <p>录入尽量短，但金额和分摊必须看得明白、改得清楚。</p>
+          <h2>{editingExpense ? '调整这笔支出' : '新增支出'}</h2>
+          <p>录入尽量短，但付款方式、参与成员和分摊结果必须看得明白、查得清楚。</p>
         </div>
         {editingExpense ? (
           <button type="button" className="ghost-button" onClick={onCancelEdit}>
-            取消修改
+            取消调整
           </button>
         ) : null}
       </div>
 
       {editingExpense ? (
         <article className="editing-info">
-          <strong>正在修改</strong>
+          <strong>正在调整</strong>
           <p>{buildExpenseSummary(editingExpense, editingParticipants, parties)}</p>
         </article>
       ) : null}
 
       <div className="stack-form compact-form">
         <label ref={titleFieldRef}>
-          <span>短标题</span>
+          <span>支出标题</span>
           <input
             value={draft.title}
             onChange={(event) => {
@@ -396,7 +396,7 @@ export function ExpenseComposerPanel(props: ExpenseComposerPanelProps) {
                 setFieldErrors((current) => ({ ...current, payer: undefined }));
               }}
             >
-              先由某家垫上
+              先由某家代付
             </button>
             <button
               type="button"
@@ -406,13 +406,13 @@ export function ExpenseComposerPanel(props: ExpenseComposerPanelProps) {
                 setFieldErrors((current) => ({ ...current, payer: undefined }));
               }}
             >
-              从大家先收的钱里出
+              从公账支出
             </button>
           </div>
 
           {draft.payerKind === 'party' ? (
             <label className="compact-top-gap">
-              <span>是哪一家先付的</span>
+              <span>是哪一家先代付</span>
               <select
                 value={draft.payerPartyId}
                 onChange={(event) => {
@@ -532,14 +532,14 @@ export function ExpenseComposerPanel(props: ExpenseComposerPanelProps) {
 
             {editingExpense ? (
               <label ref={reasonFieldRef}>
-                <span>这次为什么要改</span>
+                <span>调整原因</span>
                 <input
                   value={draft.reason}
                   onChange={(event) => {
                     setPatch({ reason: event.target.value });
                     setFieldErrors((current) => ({ ...current, reason: undefined }));
                   }}
-                  placeholder="例如：刚才金额记错了"
+                  placeholder="例如：刚才金额或参与成员写错了"
                 />
                 {fieldErrors.reason ? <p className="field-error">{fieldErrors.reason}</p> : null}
               </label>
@@ -550,7 +550,7 @@ export function ExpenseComposerPanel(props: ExpenseComposerPanelProps) {
 
       {liveAllocation.length > 0 ? (
         <article className="preview-card compact-preview-card">
-          <p className="preview-title">这笔会这样分</p>
+          <p className="preview-title">这笔支出会这样分</p>
           <div className="simple-list preview-list">
             {liveAllocation.map((line) => (
               <div key={line.partyId} className="simple-row">
@@ -568,10 +568,10 @@ export function ExpenseComposerPanel(props: ExpenseComposerPanelProps) {
       <div className="sticky-submit-bar">
         <div className="sticky-submit-copy">
           <strong>{liveSentence}</strong>
-          <p>{liveTailSentence || '确认前先看清楚这笔是谁先付、谁一起出、按什么分。'}</p>
+          <p>{liveTailSentence || '确认前先看清楚付款方式、参与成员和分摊规则。'}</p>
         </div>
         <button type="button" className="primary-button" onClick={() => void handleSubmit()} disabled={saving}>
-          {saving ? '正在入账…' : editingExpense ? '确认保存修改' : '确认正式入账'}
+          {saving ? '正在入账…' : editingExpense ? '确认保存调整' : '确认正式入账'}
         </button>
       </div>
     </section>

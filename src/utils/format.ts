@@ -80,14 +80,26 @@ export function parseAmountToCents(input: string): number | null {
 
 export function formatNetLabel(cents: number): string {
   if (cents > 0) {
-    return `应该退回 ${formatCurrency(cents)}`;
+    return `如现在清账，可退回 ${formatCurrency(cents)}`;
   }
 
   if (cents < 0) {
-    return `还需要补 ${formatCurrency(Math.abs(cents))}`;
+    return `如现在清账，还需补 ${formatCurrency(Math.abs(cents))}`;
   }
 
-  return '已经结清';
+  return '如现在清账，正好持平';
+}
+
+export function formatBalanceLabel(cents: number): string {
+  if (cents > 0) {
+    return `余额充足 ${formatCurrency(cents)}`;
+  }
+
+  if (cents < 0) {
+    return `余额不足 ${formatCurrency(Math.abs(cents))}`;
+  }
+
+  return '余额正好';
 }
 
 export function formatRecordStatus(status: 'posted' | 'void'): string {

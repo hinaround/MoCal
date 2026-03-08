@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { buildFullLedger } from '../domain/fullLedger';
 import type { Deposit, Expense, ExpenseParticipant, Party, Trip, TripSettlement } from '../domain/types';
 import { buildSettlementTransfers } from '../domain/transfers';
-import { formatCurrency, formatDateLabel, formatDateRange, formatRecordStatus } from '../utils/format';
+import { formatBalanceLabel, formatCurrency, formatDateLabel, formatDateRange, formatRecordStatus } from '../utils/format';
 import { ReasonDialog } from './ReasonDialog';
 
 interface FullLedgerPanelProps {
@@ -28,13 +28,17 @@ export function FullLedgerPanel(props: FullLedgerPanelProps) {
   const transfers = useMemo(() => buildSettlementTransfers({ parties, summaries: settlement.summaries }), [parties, settlement.summaries]);
   const [mode, setMode] = useState<LedgerMode>('screenshot');
   const [voidTarget, setVoidTarget] = useState<VoidTarget>(null);
+  const generatedAt = useMemo(
+    () => new Intl.DateTimeFormat('zh-CN', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' }).format(new Date()),
+    [],
+  );
 
   return (
     <section className="panel-card">
       <div className="section-heading">
         <div>
-          <h2>看整本流水</h2>
-          <p>这里分成两种看法：截图时只看最关键的，对账时再看逐笔明细和审计痕迹。</p>
+          <h2>总账流水</h2>
+          <p>截图时只保留最关键的信息；核对或改账时，再看逐笔明细和调整记录。</p>
         </div>
       </div>
 
@@ -48,18 +52,18 @@ export function FullLedgerPanel(props: FullLedgerPanelProps) {
       </div>
 
       {mode === 'screenshot' ? (
-        <article className="screenshot-card">
+        <article className="screenshot-card compact-top-gap">
           <div className="screenshot-header">
             <div>
-              <p className="eyebrow">全团对账图</p>
+              <p className="eyebrow">总账对账图</p>
               <h3>{trip.name}</h3>
-              <p>{formatDateRange(trip.startDate, trip.endDate)}</p>
+              <p>{formatDateRange(trip.startDate, trip.endDate)} · 生成时间 {generatedAt}</p>
             </div>
           </div>
           <div className="screenshot-grid">
-            <div><span>总花费</span><strong>{formatCurrency(settlement.totalExpenseCents)}</strong></div>
-            <div><span>先收总额</span><strong>{formatCurrency(settlement.totalDepositCents)}</strong></div>
-            <div><span>公账余额</span><strong>{formatCurrency(settlement.poolBalanceCents)}</strong></div>
+            <div><span>总入金</span><strong>{formatCurrency(settlement.totalDepositCents)}</strong></div>
+            <div><span>总支出</span><strong>{formatCurrency(settlement.totalExpenseCents)}</strong></div>
+            <div><span>公账可用余额</span><strong>{formatCurrency(settlement.poolBalanceCents)}</strong></div>
           </div>
           <div className="simple-list screenshot-summary-list">
             {settlement.summaries.map((summary) => {
@@ -68,25 +72,23 @@ export function FullLedgerPanel(props: FullLedgerPanelProps) {
                 <div key={summary.partyId} className="simple-row">
                   <div>
                     <strong>{party?.name ?? '未命名'}</strong>
-                    <span>应承担 {formatCurrency(summary.totalShareCents)} · 已拿出来 {formatCurrency(summary.totalPaidCents)}</span>
+                    <span>累计入金 {formatCurrency(summary.depositCents)} · 代付 {formatCurrency(summary.directPaidCents)} · 已分摊 {formatCurrency(summary.totalShareCents)}</span>
                   </div>
-                  <strong className={summary.netCents >= 0 ? 'good-text' : 'warn-text'}>
-                    {summary.netCents >= 0 ? `应退 ${formatCurrency(summary.netCents)}` : `应补 ${formatCurrency(Math.abs(summary.netCents))}`}
-                  </strong>
+                  <strong className={summary.netCents >= 0 ? 'good-text' : 'warn-text'}>{formatBalanceLabel(summary.netCents)}</strong>
                 </div>
               );
             })}
           </div>
           <div className="transfer-box">
-            <strong>最后怎么结</strong>
-            {transfers.length > 0 ? transfers.map((transfer) => <p key={`${transfer.fromPartyId}-${transfer.toPartyId}`}>{transfer.sentence}</p>) : <p>已经结清，不需要再转账。</p>}
+            <strong>如现在清账</strong>
+            {transfers.length > 0 ? transfers.map((transfer) => <p key={`${transfer.fromPartyId}-${transfer.toPartyId}`}>{transfer.sentence}</p>) : <p>现在如果清账，大家正好持平，不需要再转账。</p>}
           </div>
         </article>
       ) : (
         <div className="stack-list ledger-list compact-top-gap">
           {ledger.map((item) => (
             <details key={`${item.type}:${item.id}`} className="ledger-card detail-disclosure">
-              <summary className="detail-summary">
+              <summary className="detail-summary detail-summary-actions">
                 <div className="ledger-main">
                   <div className="history-topline">
                     <span className={`status-pill ${item.status === 'posted' ? 'posted' : 'void'}`}>{formatRecordStatus(item.status)}</span>
@@ -97,6 +99,29 @@ export function FullLedgerPanel(props: FullLedgerPanelProps) {
                 </div>
                 <div className="ledger-side">
                   <strong>{formatCurrency(item.amountCents)}</strong>
+                  {item.status === 'posted' ? (
+                    <div className="summary-actions">
+                      {item.type === 'deposit' ? (
+                        <>
+                          <button type="button" className="ghost-button small-button" onClick={(event) => { event.preventDefault(); event.stopPropagation(); onEditDeposit(item.id); }}>
+                            调整账目
+                          </button>
+                          <button type="button" className="ghost-button small-button danger-button" onClick={(event) => { event.preventDefault(); event.stopPropagation(); setVoidTarget({ kind: 'deposit', id: item.id, summary: item.dialogSummary, title: '作废这笔成员入金' }); }}>
+                            作废账目
+                          </button>
+                        </>
+                      ) : (
+                        <>
+                          <button type="button" className="ghost-button small-button" onClick={(event) => { event.preventDefault(); event.stopPropagation(); onEditExpense(item.id); }}>
+                            调整账目
+                          </button>
+                          <button type="button" className="ghost-button small-button danger-button" onClick={(event) => { event.preventDefault(); event.stopPropagation(); setVoidTarget({ kind: 'expense', id: item.id, summary: item.dialogSummary, title: '作废这笔支出' }); }}>
+                            作废账目
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  ) : null}
                 </div>
               </summary>
 
@@ -116,23 +141,8 @@ export function FullLedgerPanel(props: FullLedgerPanelProps) {
                   </div>
                 ) : null}
                 {item.tailNote ? <p className="tail-note">{item.tailNote}</p> : null}
-                <p className="pool-note">这笔之后公账变成：{formatCurrency(item.poolBalanceAfterCents)}</p>
+                <p className="pool-note">这笔后公账可用余额：{formatCurrency(item.poolBalanceAfterCents)}</p>
                 {item.auditNote ? <p className="audit-note">{item.auditNote}</p> : null}
-                {item.status === 'posted' ? (
-                  <div className="mini-actions">
-                    {item.type === 'deposit' ? (
-                      <>
-                        <button type="button" className="ghost-button small-button" onClick={() => onEditDeposit(item.id)}>改这笔</button>
-                        <button type="button" className="ghost-button small-button danger-button" onClick={() => setVoidTarget({ kind: 'deposit', id: item.id, summary: item.dialogSummary, title: '作废这笔先收的钱' })}>作废</button>
-                      </>
-                    ) : (
-                      <>
-                        <button type="button" className="ghost-button small-button" onClick={() => onEditExpense(item.id)}>改这笔</button>
-                        <button type="button" className="ghost-button small-button danger-button" onClick={() => setVoidTarget({ kind: 'expense', id: item.id, summary: item.dialogSummary, title: '作废这笔花费' })}>作废</button>
-                      </>
-                    )}
-                  </div>
-                ) : null}
               </div>
             </details>
           ))}
@@ -143,7 +153,7 @@ export function FullLedgerPanel(props: FullLedgerPanelProps) {
         open={Boolean(voidTarget)}
         title={voidTarget?.title ?? ''}
         summary={voidTarget?.summary ?? ''}
-        reasonLabel={voidTarget?.kind === 'deposit' ? '为什么要作废这笔收款' : '为什么要作废这笔花费'}
+        reasonLabel="作废原因"
         confirmText="确认作废"
         saving={saving}
         onCancel={() => setVoidTarget(null)}

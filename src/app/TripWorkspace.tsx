@@ -7,21 +7,22 @@ import { PartyLedgerPanel } from './PartyLedgerPanel';
 import { SettlementPanel } from './SettlementPanel';
 import { buildFullLedger } from '../domain/fullLedger';
 import { buildTripSettlement } from '../domain/settlement';
+import { buildSettlementTransfers } from '../domain/transfers';
 import type { Party, ShareMode } from '../domain/types';
 import type { TripBundle } from '../storage/ledgerRepository';
-import { formatCurrency, formatDateLabel, formatDateRange, formatNetLabel } from '../utils/format';
+import { formatBalanceLabel, formatCurrency, formatDateLabel, formatDateRange } from '../utils/format';
 
 const PRIMARY_ACTIONS = [
-  { value: 'home', label: '先看总账', hint: '先看现在谁该补谁该退' },
-  { value: 'expense', label: '记一笔花费', hint: '已经花了钱，就从这里记' },
-  { value: 'deposit', label: '先收的钱', hint: '还没花也能先把钱收上来' },
-  { value: 'ledger', label: '看整本流水', hint: '适合截图发给别人对账' },
+  { value: 'home', label: '账户总览', hint: '先看总入金、总支出、公账和各家余额' },
+  { value: 'expense', label: '新增支出', hint: '已经花了钱，就从这里记一笔支出' },
+  { value: 'deposit', label: '成员入金', hint: '还没花钱，也可以先把经费收上来' },
+  { value: 'ledger', label: '总账流水', hint: '适合截图发给朋友或家人对账' },
 ] as const;
 
 const SECONDARY_ACTIONS = [
-  { value: 'settlement', label: '最后怎么结' },
-  { value: 'party', label: '看这家的流水' },
-  { value: 'families', label: '账里有哪些家' },
+  { value: 'settlement', label: '余额汇总' },
+  { value: 'party', label: '成员账户' },
+  { value: 'families', label: '成员名单' },
 ] as const;
 
 export type WorkspaceSection = 'home' | 'expense' | 'deposit' | 'ledger' | 'settlement' | 'party' | 'families';
@@ -102,9 +103,17 @@ export function TripWorkspace(props: TripWorkspaceProps) {
     [bundle.deposits, bundle.expenseParticipants, bundle.expenses, bundle.parties],
   );
 
+  const transfers = useMemo(
+    () => buildSettlementTransfers({ parties: bundle.parties, summaries: settlement.summaries }),
+    [bundle.parties, settlement.summaries],
+  );
+
   const recentRecords = useMemo(() => [...fullLedger].reverse().slice(0, 4), [fullLedger]);
   const activeParties = useMemo(() => bundle.parties.filter((party) => party.active), [bundle.parties]);
-  const keyResults = useMemo(() => settlement.summaries.filter((summary) => summary.netCents !== 0), [settlement.summaries]);
+  const balanceSummaries = useMemo(
+    () => [...settlement.summaries].sort((left, right) => right.netCents - left.netCents),
+    [settlement.summaries],
+  );
 
   const editingDeposit = editingDepositId ? bundle.deposits.find((item) => item.id === editingDepositId) ?? null : null;
   const editingExpense = editingExpenseId ? bundle.expenses.find((item) => item.id === editingExpenseId) ?? null : null;
@@ -157,16 +166,16 @@ export function TripWorkspace(props: TripWorkspaceProps) {
             返回账本列表
           </button>
         </div>
-        <p className="eyebrow">这本账</p>
+        <p className="eyebrow">当前账本</p>
         <h1>{bundle.trip.name}</h1>
-        <p className="lead">{formatDateRange(bundle.trip.startDate, bundle.trip.endDate)} · 先点入口做事，再往下看总账和最近记录。</p>
+        <p className="lead">{formatDateRange(bundle.trip.startDate, bundle.trip.endDate)} · 先确认当前账本，再从下面四个固定入口继续操作。</p>
       </section>
 
       <section className="panel-card compact-top-gap">
         <div className="section-heading">
           <div>
             <h2>固定主入口</h2>
-            <p>主流程只放 4 个入口，不用横向滑着找。</p>
+            <p>当前账本：{bundle.trip.name}。主流程只放 4 个入口，不用来回找。</p>
           </div>
           <button type="button" className="ghost-button" onClick={() => setShowMore((current) => !current)}>
             {showMore ? '收起更多' : '更多功能'}
@@ -202,45 +211,45 @@ export function TripWorkspace(props: TripWorkspaceProps) {
         <section className="panel-card compact-top-gap">
           <div className="section-heading">
             <div>
-              <h2>先看总账</h2>
-              <p>先看总共收了多少、花了多少、谁该补谁该退。</p>
+              <h2>账户总览</h2>
+              <p>先看总入金、总支出、公账可用余额和各家当前余额。</p>
             </div>
           </div>
 
           <div className="stats-grid">
             <article className="stat-card">
-              <span>总花费</span>
-              <strong>{formatCurrency(settlement.totalExpenseCents)}</strong>
-            </article>
-            <article className="stat-card">
-              <span>先收总额</span>
+              <span>总入金</span>
               <strong>{formatCurrency(settlement.totalDepositCents)}</strong>
             </article>
+            <article className="stat-card">
+              <span>总支出</span>
+              <strong>{formatCurrency(settlement.totalExpenseCents)}</strong>
+            </article>
             <article className={`stat-card ${settlement.poolBalanceCents >= 0 ? 'good' : 'warn'}`}>
-              <span>公账余额</span>
+              <span>公账可用余额</span>
               <strong>{formatCurrency(settlement.poolBalanceCents)}</strong>
             </article>
             <article className="stat-card">
-              <span>账里有哪些家</span>
+              <span>参与家庭</span>
               <strong>{activeParties.length} 家</strong>
             </article>
           </div>
 
           <article className="inline-card compact-top-gap">
-            <strong>现在最关键</strong>
-            {keyResults.length === 0 ? (
-              <p>目前已经平账，没有人需要补或退。</p>
+            <strong>各家当前余额</strong>
+            {balanceSummaries.length === 0 ? (
+              <p>还没有成员，先去录成员名单。</p>
             ) : (
               <div className="simple-list compact-top-gap">
-                {keyResults.map((summary) => {
+                {balanceSummaries.map((summary) => {
                   const party = bundle.parties.find((item) => item.id === summary.partyId);
                   return (
-                    <div key={summary.partyId} className="simple-row">
+                    <div key={summary.partyId} className="simple-row balance-row">
                       <div>
                         <strong>{party?.name ?? '未命名'}</strong>
-                        <span>{summary.netCents > 0 ? '这家已经多拿出来了' : '这家还没出够'}</span>
+                        <span>累计入金 {formatCurrency(summary.depositCents)} · 代付 {formatCurrency(summary.directPaidCents)} · 已分摊 {formatCurrency(summary.totalShareCents)}</span>
                       </div>
-                      <strong className={summary.netCents > 0 ? 'good-text' : 'warn-text'}>{formatNetLabel(summary.netCents)}</strong>
+                      <strong className={summary.netCents >= 0 ? 'good-text' : 'warn-text'}>{formatBalanceLabel(summary.netCents)}</strong>
                     </div>
                   );
                 })}
@@ -248,10 +257,35 @@ export function TripWorkspace(props: TripWorkspaceProps) {
             )}
           </article>
 
+          <article className="inline-card compact-top-gap">
+            <strong>如现在要清账</strong>
+            {transfers.length === 0 ? (
+              <p>现在如果清账，大家正好持平，不需要再互相转账。</p>
+            ) : (
+              <div className="simple-list compact-top-gap">
+                {transfers.map((transfer) => (
+                  <div key={`${transfer.fromPartyId}-${transfer.toPartyId}`} className="simple-row">
+                    <div>
+                      <strong>{transfer.sentence}</strong>
+                      <span>这是按当前余额自动算出来的直接处理方式。</span>
+                    </div>
+                    <strong>{formatCurrency(transfer.amountCents)}</strong>
+                  </div>
+                ))}
+              </div>
+            )}
+          </article>
+
           <article className="inline-card recent-card compact-top-gap">
-            <strong>最近几笔记录</strong>
+            <strong>近期变动</strong>
             {recentRecords.length === 0 ? (
-              <p>还没有记录，先记一笔花费或先收的钱。</p>
+              <div className="simple-list compact-top-gap">
+                <p>还没有正式记录，可以先录成员名单，也可以先记第一笔成员入金。</p>
+                <div className="action-row">
+                  <button type="button" className="ghost-button small-button" onClick={() => setSection('families')}>先录成员名单</button>
+                  <button type="button" className="ghost-button small-button" onClick={() => setSection('deposit')}>先录第一笔入金</button>
+                </div>
+              </div>
             ) : (
               <div className="simple-list compact-top-gap">
                 {recentRecords.map((item) => (
@@ -339,7 +373,22 @@ export function TripWorkspace(props: TripWorkspaceProps) {
       ) : null}
 
       {section === 'party' ? (
-        <PartyLedgerPanel bundle={bundle} selectedPartyId={selectedPartyId} onChangeSelectedPartyId={setSelectedPartyId} />
+        <PartyLedgerPanel
+          bundle={bundle}
+          saving={saving}
+          selectedPartyId={selectedPartyId}
+          onChangeSelectedPartyId={setSelectedPartyId}
+          onEditDeposit={(depositId) => {
+            setEditingDepositId(depositId);
+            setSection('deposit');
+          }}
+          onVoidDeposit={onVoidDeposit}
+          onEditExpense={(expenseId) => {
+            setEditingExpenseId(expenseId);
+            setSection('expense');
+          }}
+          onVoidExpense={onVoidExpense}
+        />
       ) : null}
     </main>
   );

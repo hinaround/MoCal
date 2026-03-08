@@ -75,11 +75,11 @@ function buildParticipantSummary(participants: Array<{ partyId: string; headcoun
 
 function buildPayerSummary(expense: Pick<Expense, 'payerKind' | 'payerPartyId'>, parties: Party[]): string {
   if (expense.payerKind === 'pool') {
-    return '从大家先收的钱里出';
+    return '从公账支出';
   }
 
   const partyName = parties.find((party) => party.id === expense.payerPartyId)?.name ?? '未命名';
-  return `先由${partyName}垫上`;
+  return `先由${partyName}代付`;
 }
 
 function resolveRecordedAt(record: { paidAt: string; createdAt?: string; recordedAt?: string }): string {
@@ -117,7 +117,7 @@ function buildDepositSummary(input: {
   paidAt: string;
   note?: string;
 }): string {
-  return `哪一家：${input.partyName}；金额：${formatMoney(input.amountCents)}；日期：${input.paidAt}${input.note?.trim() ? `；备注：${input.note.trim()}` : ''}`;
+  return `成员：${input.partyName}；入金金额：${formatMoney(input.amountCents)}；日期：${input.paidAt}${input.note?.trim() ? `；备注：${input.note.trim()}` : ''}`;
 }
 
 function buildExpenseSummary(input: {
@@ -127,7 +127,7 @@ function buildExpenseSummary(input: {
 }): string {
   const title = input.expense.title?.trim() || input.expense.category?.trim() || '未写标题';
   const categoryText = input.expense.category?.trim() ? `；分类：${input.expense.category.trim()}` : '';
-  return `标题：${title}；金额：${formatMoney(input.expense.amountCents)}；日期：${input.expense.paidAt}；谁先付：${buildPayerSummary(input.expense, input.parties)}；这次谁参加：${buildParticipantSummary(input.participants, input.parties) || '未填写'}；这笔按什么分：${getShareModeLabel(input.expense.shareMode)}${input.expense.note?.trim() ? `；备注：${input.expense.note.trim()}` : ''}${categoryText}`;
+  return `标题：${title}；支出金额：${formatMoney(input.expense.amountCents)}；日期：${input.expense.paidAt}；付款方式：${buildPayerSummary(input.expense, input.parties)}；参与成员：${buildParticipantSummary(input.participants, input.parties) || '未填写'}；分摊规则：${getShareModeLabel(input.expense.shareMode)}${input.expense.note?.trim() ? `；备注：${input.expense.note.trim()}` : ''}${categoryText}`;
 }
 
 function buildAuditEntry(input: {
@@ -322,7 +322,7 @@ export async function updateDeposit(input: {
   const existing = await getById<Deposit>(STORE_NAMES.deposits, input.depositId);
 
   if (!existing) {
-    throw new Error('没找到这笔先收的钱');
+    throw new Error('没找到这笔成员入金');
   }
 
   const [beforeParty, afterParty] = await Promise.all([
@@ -367,7 +367,7 @@ export async function voidDeposit(input: { depositId: string; reason: string }):
   const existing = await getById<Deposit>(STORE_NAMES.deposits, input.depositId);
 
   if (!existing) {
-    throw new Error('没找到这笔先收的钱');
+    throw new Error('没找到这笔成员入金');
   }
 
   const party = await getById<Party>(STORE_NAMES.parties, existing.partyId);
@@ -392,7 +392,7 @@ export async function voidDeposit(input: { depositId: string; reason: string }):
         action: 'voided',
         reason: input.reason,
         beforeSummary,
-        afterSummary: `这笔先收的钱已作废，不再计入总账。原记录：${beforeSummary}`,
+        afterSummary: `这笔成员入金已作废，不再计入总账。原记录：${beforeSummary}`,
       }),
     ],
   };
@@ -447,7 +447,7 @@ export async function updateExpenseWithParticipants(input: {
   const existing = await getById<Expense>(STORE_NAMES.expenses, input.expenseId);
 
   if (!existing) {
-    throw new Error('没找到这笔花费');
+    throw new Error('没找到这笔支出');
   }
 
   const existingParticipants = await getAllByIndex<ExpenseParticipant>(STORE_NAMES.expenseParticipants, 'expenseId', input.expenseId);
@@ -487,7 +487,7 @@ export async function voidExpense(input: { expenseId: string; reason: string }):
   const existing = await getById<Expense>(STORE_NAMES.expenses, input.expenseId);
 
   if (!existing) {
-    throw new Error('没找到这笔花费');
+    throw new Error('没找到这笔支出');
   }
 
   const existingParticipants = await getAllByIndex<ExpenseParticipant>(STORE_NAMES.expenseParticipants, 'expenseId', input.expenseId);
@@ -512,7 +512,7 @@ export async function voidExpense(input: { expenseId: string; reason: string }):
         action: 'voided',
         reason: input.reason,
         beforeSummary,
-        afterSummary: `这笔花费已作废，不再计入总账。原记录：${beforeSummary}`,
+        afterSummary: `这笔支出已作废，不再计入总账。原记录：${beforeSummary}`,
       }),
     ],
   };

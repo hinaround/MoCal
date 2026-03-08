@@ -62,11 +62,11 @@ function buildAuditNote(auditTrail?: Array<{ action: string; reason?: string; be
   const lastEntry = auditTrail[auditTrail.length - 1];
 
   if (lastEntry.action === 'voided') {
-    return `已作废${lastEntry.reason ? `（原因：${lastEntry.reason}）` : ''}：${lastEntry.beforeSummary || lastEntry.afterSummary}`;
+    return `作废记录${lastEntry.reason ? `（原因：${lastEntry.reason}）` : ''}：${lastEntry.beforeSummary || lastEntry.afterSummary}`;
   }
 
   if (lastEntry.action === 'updated') {
-    return `后来改过${lastEntry.reason ? `（原因：${lastEntry.reason}）` : ''}：${lastEntry.beforeSummary || '旧内容'} → ${lastEntry.afterSummary}`;
+    return `调整记录${lastEntry.reason ? `（原因：${lastEntry.reason}）` : ''}：${lastEntry.beforeSummary || '旧内容'} → ${lastEntry.afterSummary}`;
   }
 
   return undefined;
@@ -74,8 +74,8 @@ function buildAuditNote(auditTrail?: Array<{ action: string; reason?: string; be
 
 function buildPayerLabel(expense: Expense, partyNames: Map<string, string>): string {
   return expense.payerKind === 'pool'
-    ? '从大家先收的钱里出'
-    : `先由${partyNames.get(expense.payerPartyId ?? '') ?? '未命名'}垫上`;
+    ? '从公账支出'
+    : `先由${partyNames.get(expense.payerPartyId ?? '') ?? '未命名'}代付`;
 }
 
 function buildShareModeLabel(expense: Expense): string {
@@ -138,14 +138,14 @@ export function buildFullLedger(params: {
         date: deposit.paidAt,
         type: 'deposit',
         status: deposit.status ?? 'posted',
-        title: '先收的钱',
-        subtitle: `${partyName}交来 · 这不是花费`,
+        title: '成员入金',
+        subtitle: `${partyName}入金 · 这不是支出`,
         amountCents: deposit.amountCents,
         poolDeltaCents: posted ? deposit.amountCents : 0,
         poolBalanceAfterCents: poolBalanceCents,
-        explanation: posted ? '这笔会进公账，后面花费才能从这里出。' : '这笔已作废，不再计入公账。',
+        explanation: posted ? '这笔会进入公账，后面的公账支出会从这里扣。' : '这笔已作废，不再计入公账。',
         note: deposit.note?.trim(),
-        dialogSummary: `${partyName}先交的钱 · ${formatMoney(deposit.amountCents)} · 日期 ${deposit.paidAt}${deposit.note?.trim() ? ` · 备注：${deposit.note.trim()}` : ''}`,
+        dialogSummary: `${partyName}成员入金 · ${formatMoney(deposit.amountCents)} · 日期 ${deposit.paidAt}${deposit.note?.trim() ? ` · 备注：${deposit.note.trim()}` : ''}`,
         shares: [],
         auditNote: buildAuditNote(deposit.auditTrail),
         recordedAt: resolveRecordedAt(deposit),
@@ -184,7 +184,7 @@ export function buildFullLedger(params: {
       type: 'expense',
       status: expense.status ?? 'posted',
       title,
-      subtitle: `${payerLabel} · 这次谁参加：${participantLabel || '未填写'} · ${shareLabel}`,
+      subtitle: `${payerLabel} · 参与成员：${participantLabel || '未填写'} · ${shareLabel}`,
       amountCents: expense.amountCents,
       poolDeltaCents: posted && expense.payerKind === 'pool' ? -expense.amountCents : 0,
       poolBalanceAfterCents: poolBalanceCents,
@@ -196,7 +196,7 @@ export function buildFullLedger(params: {
             participants: shares.map((share) => ({ partyId: share.partyId, tailDeltaCents: share.tailDeltaCents })),
           })
         : undefined,
-      dialogSummary: `${title} · ${formatMoney(expense.amountCents)} · ${payerLabel} · 这次谁参加：${participantLabel || '未填写'} · ${shareLabel}${expense.note?.trim() ? ` · 备注：${expense.note.trim()}` : ''}`,
+      dialogSummary: `${title} · ${formatMoney(expense.amountCents)} · ${payerLabel} · 参与成员：${participantLabel || '未填写'} · ${shareLabel}${expense.note?.trim() ? ` · 备注：${expense.note.trim()}` : ''}`,
       shares,
       auditNote: buildAuditNote(expense.auditTrail),
       recordedAt: resolveRecordedAt(expense),

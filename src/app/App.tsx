@@ -95,7 +95,7 @@ export function App() {
         setError(null);
         await refreshSelectedTrip(tripId);
       } catch (cause) {
-        setError(cause instanceof Error && cause.message ? cause.message : '打开这本账失败，请稍后再试');
+        setError(cause instanceof Error && cause.message ? cause.message : '打开当前账本失败，请稍后再试');
       } finally {
         setLoading(false);
       }
@@ -279,7 +279,7 @@ export function App() {
         {error ? <div className="banner error">{error}</div> : null}
         <section className="hero-card">
           <p className="eyebrow">正在打开</p>
-          <h1>正在读取这本账</h1>
+          <h1>正在读取当前账本</h1>
           <p className="lead">稍等一下，账本马上就好。</p>
         </section>
       </main>

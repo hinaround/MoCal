@@ -766,3 +766,58 @@ textarea:focus {
     flex-direction: column;
   }
 }
+
+.current-trip-card {
+  gap: 12px;
+}
+
+.book-status-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.storage-note {
+  color: #445468;
+  font-size: 14px;
+  line-height: 1.7;
+}
+
+.balance-row {
+  align-items: flex-start;
+}
+
+.detail-summary-actions {
+  align-items: flex-start;
+}
+
+.summary-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.summary-actions .small-button {
+  padding: 8px 10px;
+}
+
+.single-party-card {
+  gap: 14px;
+}
+
+@media (max-width: 640px) {
+  .book-status-row,
+  .detail-summary-actions .ledger-side,
+  .summary-actions {
+    align-items: stretch;
+    justify-content: flex-start;
+  }
+
+  .book-status-row,
+  .summary-actions {
+    flex-direction: column;
+  }
+}

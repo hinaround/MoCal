@@ -16,6 +16,9 @@ export interface PartyHistoryItem {
   afterNetCents: number;
   status: 'posted' | 'void';
   auditNote?: string;
+  sourceType: 'deposit' | 'expense';
+  sourceId: string;
+  dialogSummary: string;
 }
 
 export interface PartyLedger {
@@ -43,6 +46,10 @@ function resolveSequenceNo(record: StableLedgerRecord, fallbackIndex: number): n
   return Number.isNaN(parsed) ? fallbackIndex : parsed * 1000 + fallbackIndex;
 }
 
+function formatMoney(amountCents: number): string {
+  return `${(amountCents / 100).toFixed(2)}元`;
+}
+
 function getExpenseTitle(expense: Expense): string {
   return expense.title?.trim() || expense.category?.trim() || '未写标题';
 }
@@ -59,11 +66,11 @@ function getAuditNote(auditTrail?: Array<{ action: string; reason?: string; befo
   const lastEntry = auditTrail[auditTrail.length - 1];
 
   if (lastEntry.action === 'voided') {
-    return `已作废${lastEntry.reason ? `（原因：${lastEntry.reason}）` : ''}：${lastEntry.beforeSummary || lastEntry.afterSummary}`;
+    return `作废记录${lastEntry.reason ? `（原因：${lastEntry.reason}）` : ''}：${lastEntry.beforeSummary || lastEntry.afterSummary}`;
   }
 
   if (lastEntry.action === 'updated') {
-    return `后来改过${lastEntry.reason ? `（原因：${lastEntry.reason}）` : ''}：${lastEntry.beforeSummary || '旧内容'} → ${lastEntry.afterSummary}`;
+    return `调整记录${lastEntry.reason ? `（原因：${lastEntry.reason}）` : ''}：${lastEntry.beforeSummary || '旧内容'} → ${lastEntry.afterSummary}`;
   }
 
   return undefined;
@@ -101,17 +108,22 @@ export function buildPartyLedger(params: {
   let originalIndex = 0;
 
   for (const deposit of deposits.filter((item) => item.partyId === partyId)) {
+    const dialogSummary = `${partyName}成员入金 · ${formatMoney(deposit.amountCents)} · 日期 ${deposit.paidAt}${deposit.note?.trim() ? ` · 备注：${deposit.note.trim()}` : ''}`;
+
     items.push({
       id: `deposit:${deposit.id}`,
       date: deposit.paidAt,
       kind: 'deposit',
-      kindLabel: '收款',
-      title: '先收的钱',
-      detail: `${partyName}交来，记进公账，不是花费。`,
+      kindLabel: '入金',
+      title: '成员入金',
+      detail: `${partyName}入金，记进公账，不是支出。`,
       note: deposit.note?.trim(),
       signedAmountCents: deposit.amountCents,
       status: deposit.status ?? 'posted',
       auditNote: getAuditNote(deposit.auditTrail),
+      sourceType: 'deposit',
+      sourceId: deposit.id,
+      dialogSummary,
       sequenceNo: resolveSequenceNo(deposit, originalIndex),
       itemOrder: 0,
       originalIndex: originalIndex += 1,
@@ -125,7 +137,10 @@ export function buildPartyLedger(params: {
         (sortOrderById.get(right.partyId) ?? Number.MAX_SAFE_INTEGER),
     );
 
-    const participantNames = participants.map((participant) => `${partyNames.get(participant.partyId) ?? '未命名'}${expense.shareMode === 'by_headcount' ? `${participant.headcountSnapshot}人` : ''}`);
+    const participantNames = participants.map(
+      (participant) => `${partyNames.get(participant.partyId) ?? '未命名'}${expense.shareMode === 'by_headcount' ? `${participant.headcountSnapshot}人` : ''}`,
+    );
+    const dialogSummary = `${getExpenseTitle(expense)} · ${formatMoney(expense.amountCents)} · 先由${partyName}代付 · 参与成员：${participantNames.join('、') || '未填写'} · ${getShareModeLabel(expense)}${expense.note?.trim() ? ` · 备注：${expense.note.trim()}` : ''}`;
 
     items.push({
       id: `paid:${expense.id}`,
@@ -133,11 +148,14 @@ export function buildPartyLedger(params: {
       kind: 'paid',
       kindLabel: '代付',
       title: getExpenseTitle(expense),
-      detail: `先由${partyName}垫上 · 这次谁参加：${participantNames.join('、') || '未填写'} · ${getShareModeLabel(expense)}`,
+      detail: `先由${partyName}代付 · 参与成员：${participantNames.join('、') || '未填写'} · ${getShareModeLabel(expense)}`,
       note: expense.note?.trim(),
       signedAmountCents: expense.amountCents,
       status: expense.status ?? 'posted',
       auditNote: getAuditNote(expense.auditTrail),
+      sourceType: 'expense',
+      sourceId: expense.id,
+      dialogSummary,
       sequenceNo: resolveSequenceNo(expense, originalIndex),
       itemOrder: 1,
       originalIndex: originalIndex += 1,
@@ -157,7 +175,8 @@ export function buildPartyLedger(params: {
         (sortOrderById.get(right.partyId) ?? Number.MAX_SAFE_INTEGER),
     );
     const participantNames = participants.map((item) => `${partyNames.get(item.partyId) ?? '未命名'}${expense.shareMode === 'by_headcount' ? `${item.headcountSnapshot}人` : ''}`);
-    const payerLabel = expense.payerKind === 'pool' ? '从大家先收的钱里出' : `先由${partyNames.get(expense.payerPartyId ?? '') ?? '未命名'}垫上`;
+    const payerLabel = expense.payerKind === 'pool' ? '从公账支出' : `先由${partyNames.get(expense.payerPartyId ?? '') ?? '未命名'}代付`;
+    const dialogSummary = `${getExpenseTitle(expense)} · ${formatMoney(expense.amountCents)} · ${payerLabel} · 参与成员：${participantNames.join('、') || '未填写'} · ${getShareModeLabel(expense)}${expense.note?.trim() ? ` · 备注：${expense.note.trim()}` : ''}`;
 
     items.push({
       id: `share:${participant.id}`,
@@ -165,11 +184,14 @@ export function buildPartyLedger(params: {
       kind: 'share',
       kindLabel: '分摊',
       title: getExpenseTitle(expense),
-      detail: `${payerLabel} · 这次谁参加：${participantNames.join('、')} · ${getShareModeLabel(expense)}`,
+      detail: `${payerLabel} · 参与成员：${participantNames.join('、')} · ${getShareModeLabel(expense)}`,
       note: expense.note?.trim(),
       signedAmountCents: -participant.shareAmountCents,
       status: expense.status ?? 'posted',
       auditNote: getAuditNote(expense.auditTrail),
+      sourceType: 'expense',
+      sourceId: expense.id,
+      dialogSummary,
       sequenceNo: resolveSequenceNo(expense, originalIndex),
       itemOrder: 2,
       originalIndex: originalIndex += 1,
@@ -198,6 +220,9 @@ export function buildPartyLedger(params: {
       afterNetCents: runningNetCents,
       status: item.status,
       auditNote: item.auditNote,
+      sourceType: item.sourceType,
+      sourceId: item.sourceId,
+      dialogSummary: item.dialogSummary,
     } satisfies PartyHistoryItem;
   });
 
